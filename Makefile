@@ -1,8 +1,9 @@
-all: ppurs.exe
-	dune exec ./ppurs.exe
+all: ppurs
+	dune exec ./ppurs
 
-ppurs.exe:
+ppurs:
 	dune build ppurs.exe
+	mv ppurs.exe ppurs
 
 explain:
 	menhir --base /tmp/parser --dump --explain parser.mly
