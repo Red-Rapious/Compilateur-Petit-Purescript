@@ -16,11 +16,6 @@ let lident = lower other*
 let uident = upper (other | '.')*
 
 rule token = parse
-  | "--"                  { inline_comment lexbuf }
+  | "--" [^ '\n']* '\n'
   | eof                   { EOF }
   | _                     { raise (Lexing_error "construction not supported yet") }
-
-and inline_comment = parse
-  | '\n'                  { Lexing.new_line lexbuf ; token lexbuf }
-  | eof                   { EOF }
-  | _                     { inline_comment lexbuf }
