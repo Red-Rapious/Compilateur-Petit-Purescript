@@ -1,5 +1,4 @@
 all: ppurs
-	dune exec ./ppurs
 
 ppurs:
 	dune build ppurs.exe
