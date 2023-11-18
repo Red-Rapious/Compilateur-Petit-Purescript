@@ -17,5 +17,13 @@ let uident = upper (other | '.')*
 
 rule token = parse
   | "--" [^ '\n']* '\n'
+  | '\n'                  { new_line lexbuf; token lexbuf }
   | eof                   { EOF }
+  | "{-"                  { comment lexbuf }
   | _                     { raise (Lexing_error "construction not supported yet") }
+
+and comment = parse
+  | "-}"    { token lexbuf }
+  | '\n'    { new_line lexbuf; comment lexbuf }
+  | _       { comment lexbuf }
+  | eof     { raise (Lexing_error ("unterminated comment")) }
