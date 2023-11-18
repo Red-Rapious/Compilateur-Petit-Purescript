@@ -9,6 +9,10 @@ explain:
 	cat /tmp/parser.conflicts
 
 clean:
-	dune clean
+	rm ppurs
+	rm _build -d -r
+
+test: ppurs
+	./ppurs --parse-only test.purs
 
 .PHONY: all clean explain ppurs

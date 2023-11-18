@@ -39,7 +39,37 @@ let () =
   end;
 
   (* Ouverture du fichier source en lecture *)
-  (*let f = open_in !ifile in*)
+  let f = open_in !ifile in
 
   (* Création d'un tampon d'analyse lexicale *)
-  (*let buf = Lexing.from_channel f in ()*)
+  let buf = Lexing.from_channel f in
+  try
+    (* Parsing: la fonction  Parser.prog transforme le tampon lexical en un
+       arbre de syntaxe abstraite si aucune erreur (lexicale ou syntaxique)
+       n'est détectée.
+       La fonction Lexer.token est utilisée par Parser.prog pour obtenir
+       le prochain token. *)
+    let _p = Parser.prog Lexer.token buf in
+    close_in f;
+
+    (* On s'arrête ici si on ne veut faire que le parsing *)
+    if !parse_only then exit 0;
+    failwith "Erreur: seul le parsing est implémenté pour l'instant"
+    (*Interp.prog p*)
+  with
+    | Lexer.Lexing_error c ->
+    (* Erreur lexicale. On récupère sa position absolue et
+      on la convertit en numéro de ligne *)
+    localisation (Lexing.lexeme_start_p buf);
+    eprintf "Erreur lexicale: %s@." c;
+    exit 1
+      | Parser.Error ->
+    (* Erreur syntaxique. On récupère sa position absolue et on la
+      convertit en numéro de ligne *)
+    localisation (Lexing.lexeme_start_p buf);
+    eprintf "Erreur syntaxique@.";
+    exit 1
+      (*| Interp.Error s->
+    (* Erreur pendant l'interprétation *)
+    eprintf "Erreur : %s@." s;
+    exit 1*)
