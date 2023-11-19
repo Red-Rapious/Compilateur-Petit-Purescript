@@ -49,7 +49,7 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let _p = Parser.prog Lexer.token buf in
+    let _p = Parser.file Lexer.token buf in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
@@ -57,19 +57,19 @@ let () =
     failwith "Erreur: seul le parsing est implémenté pour l'instant"
     (*Interp.prog p*)
   with
-    | Lexer.Lexing_error c ->
-    (* Erreur lexicale. On récupère sa position absolue et
-      on la convertit en numéro de ligne *)
+    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
+  | Lexer.Lexing_error c ->
     localisation (Lexing.lexeme_start_p buf);
     eprintf "Erreur lexicale: %s@." c;
     exit 1
-      | Parser.Error ->
-    (* Erreur syntaxique. On récupère sa position absolue et on la
-      convertit en numéro de ligne *)
+    
+    (* Erreur syntaxique. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    | Parser.Error ->
     localisation (Lexing.lexeme_start_p buf);
     eprintf "Erreur syntaxique@.";
     exit 1
-      (*| Interp.Error s->
+      
     (* Erreur pendant l'interprétation *)
+    (*| Interp.Error s->
     eprintf "Erreur : %s@." s;
     exit 1*)

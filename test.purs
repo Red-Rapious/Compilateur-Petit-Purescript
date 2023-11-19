@@ -1,2 +1,7 @@
--- ceci est un test
-{- ceci est un autre commentaire -}
+module Main where
+
+import Prelude
+import Effect
+import Effect.Console
+
+--et hop

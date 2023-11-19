@@ -14,13 +14,33 @@ let upper = ['A'-'Z']
 let other = lower | upper | digit | '\''
 let lident = lower other*
 let uident = upper (other | '.')*
+let integer = ('0' | ['1'-'9'] digit*)
 
 rule token = parse
-  | "--" [^ '\n']* '\n'
+  | [' ' '\t' '\r']+      { token lexbuf }
+  | "--"                  { inline_comment lexbuf }
   | '\n'                  { new_line lexbuf; token lexbuf }
-  | eof                   { EOF }
   | "{-"                  { comment lexbuf }
-  | _                     { raise (Lexing_error "construction not supported yet") }
+  | '+'                   { PLUS }
+  | '-'                   { MINUS }
+  | '*'                   { TIMES }
+  | "/"                   { DIV }
+  | "=="                  { CMP Beq }
+  | "!="                  { CMP Bneq }
+  | "<"                   { CMP Blt }
+  | "<="                  { CMP Ble }
+  | ">"                   { CMP Bgt }
+  | ">="                  { CMP Bge }
+  | eof                   { EOF }
+  | "module Main where"   { MODULE_MAIN }
+  | "import Prelude\nimport Effect\nimport Effect.Console\n"
+                          { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
+  | _ as c                { raise (Lexing_error ("illegal character: " ^ String.make 1 c)) }
+
+and inline_comment = parse
+  | '\n'              { Lexing.new_line lexbuf ; token lexbuf }
+  | eof               { EOF }
+  | _                 { inline_comment lexbuf }
 
 and comment = parse
   | "-}"    { token lexbuf }
