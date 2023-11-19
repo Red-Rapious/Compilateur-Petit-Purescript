@@ -15,4 +15,7 @@ clean:
 test: ppurs
 	./ppurs --parse-only test.purs
 
+tests: ppurs
+	cd tests-10-nov ; ./test.bash -1
+
 .PHONY: all clean explain ppurs
