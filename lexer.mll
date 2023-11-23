@@ -7,6 +7,8 @@
   (* exception à lever pour signaler une erreur lexicale *)
   exception Lexing_error of string
 
+  let string_buffer = Buffer.create 1024
+
   let id_or_kwd =
     let h = Hashtbl.create 32 in
     List.iter (fun (s, tok) -> Hashtbl.add h s tok)
@@ -39,7 +41,6 @@ let other = lower | upper | digit | '\''
 let lident = lower other*
 let uident = upper (other | '.')*
 let integer = ('0' | ['1'-'9'] digit*)
-let string = "\"" _* "\""
 
 rule token = parse
   | [' ' '\t' '\r']+      { token lexbuf }
@@ -62,7 +63,7 @@ rule token = parse
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
                           { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
   | lident as i           { id_or_kwd i }
-  | string as s           { CST (Cstring s)}
+  | '"'                   { CST (Cstring (string lexbuf)) }
   | eof                   { EOF }
   | _ as c                { raise (Lexing_error ("illegal character: " ^ String.make 1 c)) }
 
@@ -76,3 +77,19 @@ and comment = parse
   | '\n'    { new_line lexbuf; comment lexbuf }
   | _       { comment lexbuf }
   | eof     { raise (Lexing_error ("unterminated comment")) }
+
+and string = parse
+  | '"'     { 
+    let s = Buffer.contents string_buffer in
+	  Buffer.reset string_buffer;
+	  s }
+  | "\\n"   { 
+    Buffer.add_char string_buffer '\n';
+	  string lexbuf }
+  | "\\\""  { 
+    Buffer.add_char string_buffer '"';
+	  string lexbuf }
+  | _ as c  { 
+    Buffer.add_char string_buffer c;
+	  string lexbuf }
+  | eof     { raise (Lexing_error "unterminated string") }
