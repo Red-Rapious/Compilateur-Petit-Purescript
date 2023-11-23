@@ -17,14 +17,14 @@ module Smap = Map.Make (Int)
 type env = typ Smap.t
 
 module V = struct
-  type t = TVar
+  type t = tvar
 
   let compare v1 v2 = Stdlib.compare v1.id v2.id
   let equal v1 v2 = v1.id = v2.id
 
   let create =
     let r = ref 0 in
-    fun () -> (incr r, { id = !r; def = None })
+    fun () -> (incr r; { id = !r; def = None })
 end
 
 let rec head = function TVar { def = Some t } -> head t | t -> t
@@ -82,3 +82,48 @@ let rec unify t1 t2 =
   | TEffectUnit, TEffectUnit ->
       ()
   | t1, t2 -> unification_error t1 t2
+
+module Vset = Set.Make(V)
+let rec fvars t = match head t with
+  | TInt | TStr | TBool | TUnit | TEffectUnit -> Vset.empty
+  | TArrow (t1, t2) | TProduct (t1, t2) -> Vset.union (fvars t1) (fvars t2)
+  | TVar v -> Vset.singleton v
+
+let norm_varset s =
+  Vset.fold (fun v s -> Vset.union (fvars (TVar v)) s) s Vset.empty
+
+
+type schema = { vars : Vset.t; typ : typ }
+module Smap = Map.Make(String)
+
+type env = { bindings : schema Smap.t; fvars : Vset.t }
+
+let empty = { bindings = Smap.empty; fvars = Vset.empty }
+
+let add gen x t env =
+  let vt = fvars t in
+  let s, fvars =
+    if gen then
+      let env_fvars = norm_varset env.fvars in
+      { vars = Vset.diff vt env_fvars; typ = t }, env.fvars
+    else
+      { vars = Vset.empty; typ = t }, Vset.union env.fvars vt
+  in
+  { bindings = Smap.add x s env.bindings; fvars = fvars }
+
+module Vmap = Map.Make(V)
+
+
+let find x env =
+  let tx = Smap.find x env.bindings in
+  let s =
+    Vset.fold (fun v s -> Vmap.add v (TVar (V.create ())) s)
+      tx.vars Vmap.empty
+  in
+  let rec subst t = match head t with
+    | TVar x as t -> (try Vmap.find x s with Not_found -> t)
+    | TInt | TBool | TStr | TUnit | TEffectUnit as t -> t
+    | TArrow (t1, t2) -> TArrow (subst t1, subst t2)
+    | TProduct (t1, t2) -> TProduct (subst t1, subst t2)
+  in
+  subst tx.typ
