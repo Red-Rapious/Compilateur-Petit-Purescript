@@ -25,6 +25,7 @@ type expr =
   | Ebinop of expr * binop * expr
   | Eunop of unop * expr
   | Eatom of atom
+  | Efunc of ident * (atom list)
 
 and atom = Aconst of constant | Aident of ident | Aexpr of expr
 (*| Atypedexpr of expr * typ*)

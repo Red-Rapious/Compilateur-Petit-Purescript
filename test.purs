@@ -4,5 +4,4 @@ import Prelude
 import Effect
 import Effect.Console
 
-x=42
---et hop
+f 1 = "hello"

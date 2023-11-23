@@ -39,6 +39,7 @@ let other = lower | upper | digit | '\''
 let lident = lower other*
 let uident = upper (other | '.')*
 let integer = ('0' | ['1'-'9'] digit*)
+let string = "\"" _* "\""
 
 rule token = parse
   | [' ' '\t' '\r']+      { token lexbuf }
@@ -61,6 +62,7 @@ rule token = parse
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
                           { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
   | lident as i           { id_or_kwd i }
+  | string as s           { CST (Cstring s)}
   | eof                   { EOF }
   | _ as c                { raise (Lexing_error ("illegal character: " ^ String.make 1 c)) }
 
