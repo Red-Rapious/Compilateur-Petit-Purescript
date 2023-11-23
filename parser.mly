@@ -31,7 +31,7 @@
 %start file
 
 /* Type des valeurs renvoyées par l'analyseur syntaxique */
-%type <Ast.program> file
+%type <Ast.file> file
 
 %%
 
@@ -42,12 +42,13 @@ file:
 ;
 
 atom:
-| e = expr        { Aexpr e }
+| c = CST         { Aconst c }
+| LPAREN e = expr RPAREN { Aexpr e }
 | id = ident      { Aident id }
 ;
 
 expr:
-| c = CST         { Econst c }
+| a = atom { Eatom a }
 
 defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }

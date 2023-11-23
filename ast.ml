@@ -17,19 +17,68 @@ type binop =
 
 type unop = Uneg
 type constant = Cbool of bool | Cstring of string | Cint of int
-type patarg = Pconst of constant | Pident of ident
-(*| Ppattern of pattern*)
+type patarg = 
+| Pconst of constant 
+| Pident of ident
+| Ppattern of pattern
+and pattern = 
+| Parg of patarg
+| Pnamedarg of ident * (patarg list)
+
+type atype = 
+| Tident of ident
+| Ttype of typ 
+and ntype = ident * (atype list)
+and typ = 
+| Tatype of atype
+| Tntype of ntype
+
+type instance =
+| Intype of ntype
+| Iarrow of (ntype list) * ntype
 
 type expr =
-  | Econst of constant
-  | Ebinop of expr * binop * expr
-  | Eunop of unop * expr
   | Eatom of atom
+  | Eunop of unop * expr
+  | Ebinop of expr * binop * expr
   | Efunc of ident * (atom list)
-
-and atom = Aconst of constant | Aident of ident | Aexpr of expr
-(*| Atypedexpr of expr * typ*)
+  | Eif of expr * expr * expr
+  | Edo of expr list
+  | Elet of binding list * expr
+  | Ecase of expr * (branch list)
+and atom = 
+| Aconst of constant 
+| Aident of ident 
+| Aexpr of expr
+| Atypedexpr of expr * typ
+and branch = pattern * expr
+and binding = ident * expr
 
 type defn = ident * patarg list * expr
-type decl = Defn of defn
-type program = { main : decl list }
+type decl = 
+| Defn of defn
+| Dtdecl of tdecl
+| Dclass of clas
+| Dinstace of instance * (defn list)
+
+and tdecl = {
+  name: ident;
+  variables: ident list;
+  ntypes: ntype list;
+  types: typ list;
+  out_type: typ
+}
+
+and data = {
+  name: ident;
+  params: ident list;
+  types: (ident * (atype list)) list
+}
+
+and clas = { 
+  name: ident; 
+  params: ident list; 
+  defs: defn list 
+}
+
+type file = { main : decl list }
