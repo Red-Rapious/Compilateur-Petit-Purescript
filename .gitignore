@@ -3,3 +3,4 @@ _build
 .vscode
 *.exe
 ppurs
+*.ocamlformat
