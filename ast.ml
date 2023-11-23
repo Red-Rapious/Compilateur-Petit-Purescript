@@ -6,15 +6,32 @@ type binop =
 | Badd | Bsub | Bmul | Bdiv
 | Band | Bor | Bconcat 
 
+type unop =
+| Uneg
+
 type constant = 
 | Cbool of bool
 | Cstring of string
 | Cint of int
 
+type patarg = 
+| Pconst of constant
+| Pident of ident
+(*| Ppattern of pattern*)
+
 type expr =
 | Econst of constant
-| Elident of ident
-| Euident of ident
+| Ebinop of expr * binop * expr
+| Eunop of unop * expr
+| Eatom of atom
+
+and atom =
+| Aconst of constant
+| Aident of ident
+| Aexpr of expr
+(*| Atypedexpr of expr * typ*)
+
+type defn = ident * patarg list * expr
 
 type program = {
   main : expr list
