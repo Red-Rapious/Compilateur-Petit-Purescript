@@ -7,12 +7,14 @@
 /* Déclaration des tokens */
 %token <Ast.constant> CST
 %token <Ast.binop> CMP
+%token <Ast.ident> IDENT
 %token MODULE_MAIN
 %token IMPORTS
 %token LPAREN RPAREN
 %token PLUS MINUS TIMES DIV
 %token AND OR
-%token EQ NEQ LT LE GT GE 
+%token DOUBLE_EQ NEQ LT LE GT GE 
+%token SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
 %token EOF
@@ -20,7 +22,7 @@
 /* Priorités et associativités des tokens */
 %left OR 
 %left AND
-%nonassoc EQ NEQ LT LE GT GE
+%nonassoc DOUBLE_EQ NEQ LT LE GT GE
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc unitary_minus
@@ -39,8 +41,41 @@ file:
     { { main = [] } }
 ;
 
-decl: {};
+atom:
+| e = expr        { Aexpr e }
+| id = ident      { Aident id }
+;
+
+expr:
+| c = CST         { Econst c }
+
+defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
+  { (name, args, e) }
+;
+
+patarg: 
+| c = CST         { Pconst c }
+| id = ident      { Pident id }
+;
+
+decl:
+| d = defn        { Defn d }
+;
 
 imports:
   IMPORTS {}
+;
+
+%inline binop:
+| PLUS  { Badd }
+| MINUS { Bsub }
+| TIMES { Bmul }
+| DIV   { Bdiv }
+| c=CMP { c    }
+| AND   { Band }
+| OR    { Bor  }
+;
+
+ident:
+  id = IDENT { id }
 ;

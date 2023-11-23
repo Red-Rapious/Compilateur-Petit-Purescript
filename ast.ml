@@ -33,6 +33,9 @@ and atom =
 
 type defn = ident * patarg list * expr
 
+type decl =
+| Defn of defn
+
 type program = {
-  main : expr list
+  main : decl list
 }
