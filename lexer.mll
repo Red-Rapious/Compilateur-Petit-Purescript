@@ -10,7 +10,7 @@
   let string_buffer = Buffer.create 1024
 
   let id_or_kwd =
-    let h = Hashtbl.create 32 in
+    let h = Hashtbl.create 17 in
     List.iter (fun (s, tok) -> Hashtbl.add h s tok)
       [
         "case", EOF; 
@@ -91,6 +91,7 @@ and string = parse
   | "\\\""  { 
     Buffer.add_char string_buffer '"';
 	  string lexbuf }
+  | "\\" [' ' '\t' '\r']+ "\\"  { string lexbuf }
   | _ as c  { 
     Buffer.add_char string_buffer c;
 	  string lexbuf }
