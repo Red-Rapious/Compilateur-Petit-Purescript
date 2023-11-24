@@ -18,6 +18,8 @@
 %token CONCAT
 %token LBRACK RBRACK
 %token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS
+%token DATA CLASS WHERE INSTANCE
+%token IF THEN ELSE DO LET IN CASE OF FORALL 
 %token EOF
 
 /* Priorités et associativités des tokens */

@@ -13,23 +13,23 @@
     let h = Hashtbl.create 17 in
     List.iter (fun (s, tok) -> Hashtbl.add h s tok)
       [
-        "case", EOF; 
-        "class", EOF; 
-        "data", EOF;
-        "do", EOF; 
-        "else", EOF;
+        "case", CASE; 
+        "class", CLASS; 
+        "data", DATA;
+        "do", DO; 
+        "else", ELSE;
         "false", CST (Cbool false); 
-        "forall", EOF;
-        "if", EOF; 
-        "import", EOF; 
-        "in", EOF;
-        "instance", EOF;
-        "let", EOF;
-        "module", EOF;
-        "of", EOF;
-        "then", EOF;
+        "forall", FORALL;
+        "if", IF; 
+        (*"import", IMPORT;*)
+        "in", IN;
+        "instance", INSTANCE;
+        "let", LET;
+        (*"module", MODULE;*)
+        "of", OF;
+        "then", THEN;
         "true", CST (Cbool true);
-        "when", EOF;
+        "where", WHERE;
       ];
     fun s -> try Hashtbl.find h s with Not_found -> IDENT s
 }
