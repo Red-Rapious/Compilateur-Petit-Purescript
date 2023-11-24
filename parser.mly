@@ -17,6 +17,7 @@
 %token SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
+%token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS
 %token EOF
 
 /* Priorités et associativités des tokens */

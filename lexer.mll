@@ -58,8 +58,12 @@ rule token = parse
   | ">"                   { CMP Bgt }
   | ">="                  { CMP Bge }
   | "="                   { SIMPLE_EQ }
+  | "<>"                  { CONCAT }
   | "("                   { LPAREN }
   | ")"                   { RPAREN }
+  | "->"                  { SIMPLE_ARROW }
+  | "=>"                  { DOUBLE_ARROW }
+  | "::"                  { DOUBLE_POINTS }
   | integer as i          { CST (Cint (int_of_string i))}
   | "module Main where"   { MODULE_MAIN }
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
