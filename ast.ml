@@ -38,14 +38,14 @@ type instance =
 | Iarrow of (ntype list) * ntype
 
 type expr =
-  | Eatom of atom
-  | Eunop of unop * expr
-  | Ebinop of expr * binop * expr
-  | Efunc of ident * (atom list)
-  | Eif of expr * expr * expr
-  | Edo of expr list
-  | Elet of binding list * expr
-  | Ecase of expr * (branch list)
+| Eatom of atom
+| Eunop of unop * expr
+| Ebinop of expr * binop * expr
+| Efunc of ident * (atom list)
+| Eif of expr * expr * expr
+| Edo of expr list
+| Elet of binding list * expr
+| Ecase of expr * (branch list)
 and atom = 
 | Aconst of constant 
 | Aident of ident 

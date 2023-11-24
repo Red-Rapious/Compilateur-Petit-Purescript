@@ -25,7 +25,7 @@
 /* Priorités et associativités des tokens */
 %left OR 
 %left AND
-%nonassoc DOUBLE_EQ NEQ LT LE GT GE
+%nonassoc DOUBLE_EQ NEQ LT LE GT GE LPAREN RPAREN LBRACK RBRACK
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc unitary_minus
@@ -45,30 +45,37 @@ file:
 ;
 
 atom:
-| c = CST         { Aconst c }
-| LPAREN e = expr RPAREN { Aexpr e }
-| id = ident      { Aident id }
+| c = CST                       { Aconst c }
+| id = ident                    { Aident id }
+| LPAREN e = expr RPAREN        { Aexpr e }
 ;
 
 expr:
-| a = atom { Eatom a }
+| a = atom                                      { Eatom a }
+| MINUS e1 = expr %prec unitary_minus           { Eunop (Uneg, e1) }
+| e1 = expr o = binop e2 = expr                 { Ebinop (e1, o, e2) }
+| id = ident a = nonempty_list(atom)            { Efunc (id, a) }
+| IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
+| DO LBRACK el=nonempty_list(expr) RBRACK       { Edo el }
 
 defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
 ;
 
 patarg: 
-| c = CST         { Pconst c }
-| id = ident      { Pident id }
+| c = CST                       { Pconst c }
+| id = ident                    { Pident id }
 ;
 
 decl:
-| d = defn        { Defn d }
+| d = defn                      { Defn d }
 ;
 
 imports:
   IMPORTS {}
 ;
+
+binding: id=ident SIMPLE_EQ e=expr  { id*e }
 
 %inline binop:
 | PLUS  { Badd }
