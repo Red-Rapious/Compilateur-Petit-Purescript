@@ -16,11 +16,14 @@ type binop =
   | Bconcat
 
 type unop = Uneg
+
 type constant = Cbool of bool | Cstring of string | Cint of int
+
 type patarg = 
 | Pconst of constant 
 | Pident of ident
 | Ppattern of pattern
+
 and pattern = 
 | Parg of patarg
 | Pnamedarg of ident * (patarg list)
@@ -28,7 +31,9 @@ and pattern =
 type atype = 
 | Tident of ident
 | Ttype of typ 
+
 and ntype = ident * (atype list)
+
 and typ = 
 | Tatype of atype
 | Tntype of ntype
@@ -44,17 +49,21 @@ type expr =
 | Efunc of ident * (atom list)
 | Eif of expr * expr * expr
 | Edo of expr list
-| Elet of binding list * expr
+| Elet of  binding list * expr
 | Ecase of expr * (branch list)
+
 and atom = 
 | Aconst of constant 
 | Aident of ident 
 | Aexpr of expr
 | Atypedexpr of expr * typ
+
 and branch = pattern * expr
+
 and binding = ident * expr
 
 type defn = ident * patarg list * expr
+
 type decl = 
 | Defn of defn
 | Dtdecl of tdecl
