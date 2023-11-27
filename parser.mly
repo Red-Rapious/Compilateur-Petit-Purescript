@@ -39,11 +39,33 @@
 
 %%
 
+ident: id = IDENT { id };
+
 /* Règles de grammaire */
 file:
   MODULE_MAIN i=imports d=separated_list(SEMICOLON, decl) EOF
     { { main = d } }
 ;
+
+imports: IMPORTS {};
+
+decl:
+| d = defn                      { Defn d }
+;
+
+defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
+  { (name, args, e) }
+;
+
+patarg: 
+| c = CST                       { Pconst c }
+| id = ident                    { Pident id }
+| LPAREN p=pattern RPAREN       { Ppattern p }
+;
+
+pattern:
+| p = patarg                    { Parg p }
+| id = ident l = nonempty_list(patarg) { Pnamedarg (id, l) }
 
 atom:
 | c = CST                       { Aconst c }
@@ -63,28 +85,6 @@ expr:
 | CASE e=expr OF LBRACK b=separated_list(SEMICOLON, branch) RBRACK
                                                 { Ecase (e, b) }
 
-decl:
-| d = defn                      { Defn d }
-;
-
-defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
-  { (name, args, e) }
-;
-
-patarg: 
-| c = CST                       { Pconst c }
-| id = ident                    { Pident id }
-| LPAREN p=pattern RPAREN       { Ppattern p }
-;
-
-imports:
-  IMPORTS {}
-;
-
-pattern:
-| p = patarg                    { Parg p }
-| id = ident l = nonempty_list(patarg) { Pnamedarg (id, l) }
-
 binding: id = ident  SIMPLE_EQ    e = expr { (id, e) }
 branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
 
@@ -96,8 +96,4 @@ branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
 | c=CMP { c    }
 | AND   { Band }
 | OR    { Bor  }
-;
-
-ident:
-  id = IDENT { id }
 ;
