@@ -20,6 +20,7 @@
 %token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS
 %token DATA CLASS WHERE INSTANCE
 %token IF THEN ELSE DO LET IN CASE OF FORALL 
+%token SEMICOLON
 %token EOF
 
 /* Priorités et associativités des tokens */
@@ -40,8 +41,8 @@
 
 /* Règles de grammaire */
 file:
-  MODULE_MAIN i=imports d=decl EOF
-    { { main = [] } }
+  MODULE_MAIN i=imports d=separated_list(SEMICOLON, decl) EOF
+    { { main = d } }
 ;
 
 atom:
@@ -57,6 +58,14 @@ expr:
 | id = ident a = nonempty_list(atom)            { Efunc (id, a) }
 | IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
 | DO LBRACK el=nonempty_list(expr) RBRACK       { Edo el }
+| LET LBRACK b=separated_list(SEMICOLON, binding) RBRACK IN e=expr
+                                                { Elet (b, e)}
+| CASE e=expr OF LBRACK b=separated_list(SEMICOLON, branch) RBRACK
+                                                { Ecase (e, b) }
+
+decl:
+| d = defn                      { Defn d }
+;
 
 defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
@@ -65,17 +74,19 @@ defn: name = ident args = list(patarg) SIMPLE_EQ e = expr
 patarg: 
 | c = CST                       { Pconst c }
 | id = ident                    { Pident id }
-;
-
-decl:
-| d = defn                      { Defn d }
+| LPAREN p=pattern RPAREN       { Ppattern p }
 ;
 
 imports:
   IMPORTS {}
 ;
 
-binding: id=ident SIMPLE_EQ e=expr  { id*e }
+pattern:
+| p = patarg                    { Parg p }
+| id = ident l = nonempty_list(patarg) { Pnamedarg (id, l) }
+
+binding: id = ident  SIMPLE_EQ    e = expr { (id, e) }
+branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
 
 %inline binop:
 | PLUS  { Badd }
