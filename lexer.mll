@@ -65,6 +65,7 @@ rule token = parse
   | "=>"                  { DOUBLE_ARROW }
   | "::"                  { DOUBLE_POINTS }
   | ";"                   { SEMICOLON }
+  | "|"                   { VBAR }
   | integer as i          { CST (Cint (int_of_string i))}
   | "module Main where"   { MODULE_MAIN }
   | "import Prelude\nimport Effect\nimport Effect.Console\n"

@@ -13,20 +13,20 @@
 %token LPAREN RPAREN
 %token PLUS MINUS TIMES DIV
 %token AND OR
-%token DOUBLE_EQ NEQ LT LE GT GE 
+%token DOUBLE_EQ NEQ
 %token SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
 %token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS
 %token DATA CLASS WHERE INSTANCE
 %token IF THEN ELSE DO LET IN CASE OF FORALL 
-%token SEMICOLON
+%token SEMICOLON VBAR
 %token EOF
 
 /* Priorités et associativités des tokens */
 %left OR 
 %left AND
-%nonassoc DOUBLE_EQ NEQ LT LE GT GE LPAREN RPAREN LBRACK RBRACK
+%nonassoc DOUBLE_EQ NEQ LPAREN RPAREN LBRACK RBRACK
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc unitary_minus
@@ -49,13 +49,39 @@ file:
 
 imports: IMPORTS {};
 
+(* TODO: séparer UIDENT et LIDENT *)
 decl:
 | d = defn                      { Defn d }
+
+(*| DATA 
+  name=ident
+  params=list(ident) 
+  SIMPLE_EQ 
+  types=separated_nonempty_list(VBAR, ident (*atype*))
+{
+  name=name;
+  params=params;
+  types=types
+}*)
 ;
+
 
 defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
 ;
+
+(*ntype:
+| id=ident l=list(atype) { (id, l) }
+;
+atype:
+| id=ident { Tident id }
+| LPAREN t=typ RPAREN { Ttype t }
+;
+typ:
+| a=atype  { Tatype a }
+| n=ntype  { Tntype n }
+;
+*)
 
 patarg: 
 | c = CST                       { Pconst c }
@@ -71,6 +97,7 @@ atom:
 | c = CST                       { Aconst c }
 | id = ident                    { Aident id }
 | LPAREN e = expr RPAREN        { Aexpr e }
+(*| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN { Atypedexpr (e, t) }*)
 ;
 
 expr:
