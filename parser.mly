@@ -7,7 +7,8 @@
 /* Déclaration des tokens */
 %token <Ast.constant> CST
 %token <Ast.binop> CMP
-%token <Ast.ident> IDENT
+%token <Ast.ident> LIDENT
+%token <Ast.ident> UIDENT
 %token MODULE_MAIN
 %token IMPORTS
 %token LPAREN RPAREN
@@ -39,7 +40,8 @@
 
 %%
 
-ident: id = IDENT { id };
+lident: id = LIDENT { id };
+uident: id = UIDENT { id };
 
 /* Règles de grammaire */
 file:
@@ -54,10 +56,10 @@ decl:
 | d = defn                      { Defn d }
 
 (*| DATA 
-  name=ident
-  params=list(ident) 
+  name=uident
+  params=list(lident) 
   SIMPLE_EQ 
-  types=separated_nonempty_list(VBAR, ident (*atype*))
+  types=separated_nonempty_list(VBAR, uident atype)
 {
   name=name;
   params=params;
@@ -66,15 +68,16 @@ decl:
 ;
 
 
-defn: name = ident args = list(patarg) SIMPLE_EQ e = expr 
+defn: name = lident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
 ;
 
 (*ntype:
-| id=ident l=list(atype) { (id, l) }
+| id=uident l=list(atype) { (id, l) }
 ;
 atype:
-| id=ident { Tident id }
+| id=uident { Tident id }
+| id=lident { Tident id }
 | LPAREN t=typ RPAREN { Ttype t }
 ;
 typ:
@@ -85,17 +88,19 @@ typ:
 
 patarg: 
 | c = CST                       { Pconst c }
-| id = ident                    { Pident id }
+| id = lident                   { Pident id }
+| id = uident                   { Pident id }
 | LPAREN p=pattern RPAREN       { Ppattern p }
 ;
 
 pattern:
 | p = patarg                    { Parg p }
-| id = ident l = nonempty_list(patarg) { Pnamedarg (id, l) }
+| id = uident l = nonempty_list(patarg) { Pnamedarg (id, l) }
 
 atom:
 | c = CST                       { Aconst c }
-| id = ident                    { Aident id }
+| id = lident                   { Aident id }
+| id = uident                   { Aident id }
 | LPAREN e = expr RPAREN        { Aexpr e }
 (*| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN { Atypedexpr (e, t) }*)
 ;
@@ -104,7 +109,9 @@ expr:
 | a = atom                                      { Eatom a }
 | MINUS e1 = expr %prec unitary_minus           { Eunop (Uneg, e1) }
 | e1 = expr o = binop e2 = expr                 { Ebinop (e1, o, e2) }
-| id = ident a = nonempty_list(atom)            { Efunc (id, a) }
+(* TODO: change *)
+| id = lident a = nonempty_list(atom)           { Efunc (id, a) }
+| id = uident a = nonempty_list(atom)           { Efunc (id, a) }
 | IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
 | DO LBRACK el=nonempty_list(expr) RBRACK       { Edo el }
 | LET LBRACK b=separated_list(SEMICOLON, binding) RBRACK IN e=expr
@@ -112,7 +119,7 @@ expr:
 | CASE e=expr OF LBRACK b=separated_list(SEMICOLON, branch) RBRACK
                                                 { Ecase (e, b) }
 
-binding: id = ident  SIMPLE_EQ    e = expr { (id, e) }
+binding: id = lident  SIMPLE_EQ    e = expr { (id, e) }
 branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
 
 %inline binop:

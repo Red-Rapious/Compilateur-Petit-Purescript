@@ -31,7 +31,7 @@
         "true", CST (Cbool true);
         "where", WHERE;
       ];
-    fun s -> try Hashtbl.find h s with Not_found -> IDENT s
+    fun s -> try Hashtbl.find h s with Not_found -> LIDENT s
 }
 
 let digit = ['0'-'9']
@@ -71,6 +71,7 @@ rule token = parse
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
                           { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
   | lident as i           { id_or_kwd i }
+  | uident as i           { UIDENT i }
   | '"'                   { CST (Cstring (string lexbuf)) }
   | eof                   { EOF }
   | _ as c                { raise (Lexing_error ("illegal character: " ^ String.make 1 c)) }
