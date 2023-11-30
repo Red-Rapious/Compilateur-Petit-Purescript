@@ -77,15 +77,15 @@ rule token = parse
   | _ as c                { raise (Lexing_error ("illegal character: " ^ String.make 1 c)) }
 
 and inline_comment = parse
-  | '\n'              { Lexing.new_line lexbuf ; token lexbuf }
-  | eof               { EOF }
-  | _                 { inline_comment lexbuf }
+  | '\n'                  { Lexing.new_line lexbuf ; token lexbuf }
+  | eof                   { EOF }
+  | _                     { inline_comment lexbuf }
 
 and comment = parse
-  | "-}"    { token lexbuf }
-  | '\n'    { new_line lexbuf; comment lexbuf }
-  | _       { comment lexbuf }
-  | eof     { raise (Lexing_error ("unterminated comment")) }
+  | "-}"                  { token lexbuf }
+  | '\n'                  { new_line lexbuf; comment lexbuf }
+  | _                     { comment lexbuf }
+  | eof                   { raise (Lexing_error ("unterminated comment")) }
 
 and string = parse
   | '"'     { 

@@ -1,5 +1,4 @@
 /* Analyseur syntaxique */
-
 %{
   open Ast
 %}
@@ -27,10 +26,11 @@
 /* Priorités et associativités des tokens */
 %left OR 
 %left AND
-%nonassoc DOUBLE_EQ NEQ LPAREN RPAREN LBRACK RBRACK
+%nonassoc DOUBLE_EQ NEQ LPAREN RPAREN LBRACK RBRACK CMP
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc unitary_minus
+%nonassoc IF ELSE IN
 
 /* Point d'entrée de la grammaire */
 %start file
@@ -51,10 +51,9 @@ file:
 
 imports: IMPORTS {};
 
-(* TODO: séparer UIDENT et LIDENT *)
 decl:
 | d = defn                      { Defn d }
-
+;
 (*| DATA 
   name=uident
   params=list(lident) 
@@ -64,8 +63,8 @@ decl:
   name=name;
   params=params;
   types=types
-}*)
-;
+}
+;*)
 
 
 defn: name = lident args = list(patarg) SIMPLE_EQ e = expr 
@@ -109,14 +108,13 @@ expr:
 | a = atom                                      { Eatom a }
 | MINUS e1 = expr %prec unitary_minus           { Eunop (Uneg, e1) }
 | e1 = expr o = binop e2 = expr                 { Ebinop (e1, o, e2) }
-(* TODO: change *)
 | id = lident a = nonempty_list(atom)           { Efunc (id, a) }
 | id = uident a = nonempty_list(atom)           { Efunc (id, a) }
 | IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
 | DO LBRACK el=nonempty_list(expr) RBRACK       { Edo el }
-| LET LBRACK b=separated_list(SEMICOLON, binding) RBRACK IN e=expr
+| LET LBRACK b=separated_nonempty_list(SEMICOLON, binding) RBRACK IN e=expr
                                                 { Elet (b, e)}
-| CASE e=expr OF LBRACK b=separated_list(SEMICOLON, branch) RBRACK
+| CASE e=expr OF LBRACK b=separated_nonempty_list(SEMICOLON, branch) RBRACK
                                                 { Ecase (e, b) }
 
 binding: id = lident  SIMPLE_EQ    e = expr { (id, e) }
