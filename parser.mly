@@ -22,6 +22,7 @@
 %token IF THEN ELSE DO LET IN CASE OF FORALL 
 %token SEMICOLON VBAR
 %token EOF
+%token UNITARY_MINUS
 
 /* Priorités et associativités des tokens */
 %left OR 
@@ -29,7 +30,7 @@
 %nonassoc DOUBLE_EQ NEQ LPAREN RPAREN LBRACK RBRACK CMP
 %left PLUS MINUS CONCAT
 %left TIMES DIV
-%nonassoc unitary_minus
+%nonassoc UNITARY_MINUS
 %nonassoc IF ELSE IN
 
 /* Point d'entrée de la grammaire */
@@ -106,12 +107,13 @@ atom:
 
 expr:
 | a = atom                                      { Eatom a }
-| MINUS e1 = expr %prec unitary_minus           { Eunop (Uneg, e1) }
+| MINUS e = expr %prec UNITARY_MINUS            { Eunop (Uneg, e) }
 | e1 = expr o = binop e2 = expr                 { Ebinop (e1, o, e2) }
 | id = lident a = nonempty_list(atom)           { Efunc (id, a) }
 | id = uident a = nonempty_list(atom)           { Efunc (id, a) }
 | IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
-| DO LBRACK el=nonempty_list(expr) RBRACK       { Edo el }
+| DO LBRACK el=separated_nonempty_list(SEMICOLON, expr) RBRACK       
+                                                { Edo el }
 | LET LBRACK b=separated_nonempty_list(SEMICOLON, binding) RBRACK IN e=expr
                                                 { Elet (b, e)}
 | CASE e=expr OF LBRACK b=separated_nonempty_list(SEMICOLON, branch) RBRACK
