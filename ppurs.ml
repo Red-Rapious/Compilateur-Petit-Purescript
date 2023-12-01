@@ -49,7 +49,7 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let _p = Parser.file (Indenter.indent false) buf  in
+    let _p = Parser.file (Indenter.indent true) buf  in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)

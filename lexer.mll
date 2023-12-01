@@ -98,6 +98,7 @@ and string = parse
   | "\\\""  { 
     Buffer.add_char string_buffer '"';
 	  string lexbuf }
+  (* TODO: autoriser et compter les \n *)
   | "\\" [' ' '\t' '\r']+ "\\"  { string lexbuf }
   | _ as c  { 
     Buffer.add_char string_buffer c;

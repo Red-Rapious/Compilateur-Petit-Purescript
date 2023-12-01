@@ -3,7 +3,7 @@ open Format
 open Parser
 
 let print_binop b = 
-Format.printf "%s" (match b with
+match b with
 | Beq -> "=="
 | Bneq -> "!="
 | Blt ->  "<"
@@ -17,13 +17,8 @@ Format.printf "%s" (match b with
 | Band -> "&&"
 | Bor -> "||"
 | Bconcat -> "<>"
-)
 
 let print_token t = match t with
-(* %token <Ast.constant> CST
-%token <Ast.binop> CMP
-%token <Ast.ident> LIDENT
-%token <Ast.ident> UIDENT *)
 | MODULE_MAIN -> "module Main where\n"
 | IMPORTS -> "imports\n"
 | LPAREN -> "("
@@ -38,12 +33,12 @@ let print_token t = match t with
 | NEQ -> "!= "
 | SIMPLE_EQ -> "= "
 | CONCAT -> "<> "
-| LBRACK -> "{ "
-| RBRACK -> "} "
+| LBRACK -> "{\n\t"
+| RBRACK -> "}\n"
 | DOUBLE_ARROW -> "=> "
-| SIMPLE_ARROW -> "->"
+| SIMPLE_ARROW -> "-> "
 | DOUBLE_POINTS -> ":: "
-| DATA -> "data"
+| DATA -> "data "
 | CLASS -> "class "
 | WHERE -> "where "
 | INSTANCE -> "instance "
@@ -56,10 +51,16 @@ let print_token t = match t with
 | CASE -> "case "
 | OF -> "of "
 | FORALL -> "forall "
-| SEMICOLON -> "; "
+| SEMICOLON -> ";\n\t"
 | VBAR -> "| "
 | EOF -> "EOF\n"
 | UNITARY_MINUS -> "u- "
 | LIDENT i -> i ^ " "
 | UIDENT i -> i ^ " "
-| _ -> "?? "
+| CST c -> 
+  (match c with
+  | Cbool b -> string_of_bool b ^ " "
+  | Cstring s -> "\"" ^ s ^ "\" "
+  | Cint i -> string_of_int i ^ " "
+  )
+| CMP binop -> print_binop binop

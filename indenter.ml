@@ -15,18 +15,10 @@ let rec fermer c =
   match Stack.top pile with
   | Block n when n > c -> 
     let _ = Stack.pop pile in 
-    Queue.add LBRACK file ; 
+    Queue.add RBRACK file ; 
     fermer c
-  | Block c -> Queue.add SEMICOLON file
+  | Block n when n = c -> Queue.add SEMICOLON file
   | _ -> ()
-
-(*let rec find_M = 
-  if Stack.length pile = 0 then failwith "Erreur : pile vide, impossible de trouver M"
-  else begin 
-    match Stack.pop pile with 
-    | M -> ()
-    | Block _ -> Queue.add RBRACK file ; find_M
-  end*)
 
 let find_M () = 
   let depile = ref true in 
@@ -39,16 +31,15 @@ let find_M () =
     end
   done
 
-let rec traiter_lexeme strong buf =
-  (* A VERIFIER : est-ce que appeler buf ne consomme pas le lexeme *)
-  let c = (lexeme_start_p buf).pos_bol in
-  let l = Lexer.token buf in
+let rec traiter_lexeme strong l buf =
+  let pos = lexeme_start_p buf in
+  let c = pos.pos_cnum - pos.pos_bol in 
   match l with
   | IF | LPAREN | CASE -> 
     if strong then fermer c ; 
     Stack.push M pile ; 
     Queue.push l file
-  | RPAREN | ELSE | IN | THEN -> 
+  | RPAREN | THEN | ELSE | IN -> 
     find_M () ; 
     if l = THEN then Stack.push M pile ; 
     Queue.push l file
@@ -58,12 +49,17 @@ let rec traiter_lexeme strong buf =
     if l = OF then find_M () ;
     Queue.push l file ; 
     Queue.push LBRACK file ; 
-    let c' = (lexeme_start_p buf).pos_bol in
+    let t = Lexer.token buf in
+    let pos' = lexeme_start_p buf in
+    let c' = pos'.pos_cnum - pos'.pos_bol in
     if strong then fermer c' ;
     Stack.push (Block c') pile ;
-    traiter_lexeme false buf
-  | _ -> fermer c ; Queue.push l file
+    traiter_lexeme false t buf
+  | EOF -> if strong then fermer (-1) ; Queue.push l file
+  | _ -> if strong then fermer c ; Queue.push l file
 
 let rec indent strong buf : token =
-  if Queue.is_empty file then traiter_lexeme strong buf ;
-  Queue.pop file
+  if Queue.is_empty file then traiter_lexeme strong (Lexer.token buf) buf ;
+  let t = Queue.pop file in 
+  Format.printf "%s" (Pretty.print_token t) ;
+  t
