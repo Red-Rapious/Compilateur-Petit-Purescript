@@ -4,8 +4,6 @@ import Effect
 import Effect.Console
 
 
-main = let x = "a"
-           y = "b" in
-    do
-  log x
-  log y
+main = do log "a"
+          do log "b"
+             log "c"

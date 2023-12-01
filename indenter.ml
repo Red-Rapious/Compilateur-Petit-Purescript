@@ -4,7 +4,7 @@ open Lexing
 exception IndentationError of string
 
 type pile_type =
-| Block of int
+| B of int
 | M
 
 let pile = Stack.create ()
@@ -13,11 +13,11 @@ let file = Queue.create ()
 let rec fermer c =
   if Stack.length pile <> 0 then 
   match Stack.top pile with
-  | Block n when n > c -> 
+  | B n when n > c -> 
     let _ = Stack.pop pile in 
     Queue.add RBRACK file ; 
     fermer c
-  | Block n when n = c -> Queue.add SEMICOLON file
+  | B n when n = c -> Queue.add SEMICOLON file
   | _ -> ()
 
 let find_M () = 
@@ -27,7 +27,7 @@ let find_M () =
     else begin 
       match Stack.pop pile with 
       | M -> depile := false
-      | Block _ -> Queue.add RBRACK file
+      | B _ -> Queue.add RBRACK file
     end
   done
 
@@ -53,7 +53,7 @@ let rec traiter_lexeme strong l buf =
     let pos' = lexeme_start_p buf in
     let c' = pos'.pos_cnum - pos'.pos_bol in
     if strong then fermer c' ;
-    Stack.push (Block c') pile ;
+    Stack.push (B c') pile ;
     traiter_lexeme false t buf
   | EOF -> if strong then fermer (-1) ; Queue.push l file
   | _ -> if strong then fermer c ; Queue.push l file
@@ -61,5 +61,5 @@ let rec traiter_lexeme strong l buf =
 let rec indent strong buf : token =
   if Queue.is_empty file then traiter_lexeme strong (Lexer.token buf) buf ;
   let t = Queue.pop file in 
-  Format.printf "%s" (Pretty.print_token t) ;
+  (*Format.printf "%s" (Pretty.print_token t) ;*)
   t
