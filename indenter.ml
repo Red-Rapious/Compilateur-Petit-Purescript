@@ -35,17 +35,26 @@ let find_M =
     end
   done
 
-let indent strong buf : token =
-  (* TODO: vérifier si la file n'est pas vide, si oui défiler *)
+let rec traiter_lexeme strong buf =
   (* A VERIFIER : est-ce que appeler buf ne consomme pas le lexeme *)
   let c = (lexeme_start_p buf).pos_bol in
   let l = Lexer.token buf in
-  (match l with
-  | IF | LPAREN | CASE -> fermer c ; Stack.push M pile ; Queue.push l file
+  match l with
+  | IF | LPAREN | CASE -> if strong then fermer c ; Stack.push M pile ; Queue.push l file
   | RPAREN | ELSE | IN -> find_M
   | THEN -> find_M ; Stack.push M pile
-  | WHERE | DO -> fermer c ; Queue.push l file ; Queue.push LBRACK file ; failwith "todo"
-  | LET -> failwith "todo"
-  | OF -> failwith "todo"
-  | _ -> fermer c) ;
+  | WHERE | DO | LET | OF -> 
+    fermer c ; 
+    if l = LET then Stack.push M pile ;
+    if l = OF then find_M ;
+    Queue.push l file ; 
+    Queue.push LBRACK file ; 
+    let c' = (lexeme_start_p buf).pos_bol in
+    if strong then fermer c' ;
+    Stack.push (Block c') pile ;
+    traiter_lexeme false buf
+  | _ -> fermer c
+
+let rec indent strong buf : token =
+  if Queue.is_empty file then traiter_lexeme strong buf ;
   Queue.pop file
