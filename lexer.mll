@@ -66,6 +66,8 @@ rule token = parse
   | "::"                  { DOUBLE_POINTS }
   | ";"                   { SEMICOLON }
   | "|"                   { VBAR }
+  | "."                   { POINT }
+  | ","                   { COMMA }
   | integer as i          { CST (Cint (int_of_string i))}
   | "module Main where"   { MODULE_MAIN }
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
@@ -98,9 +100,14 @@ and string = parse
   | "\\\""  { 
     Buffer.add_char string_buffer '"';
 	  string lexbuf }
-  (* TODO: autoriser et compter les \n *)
-  | "\\" [' ' '\t' '\r']+ "\\"  { string lexbuf }
+  | "\\"    { between_slashes lexbuf }
   | _ as c  { 
     Buffer.add_char string_buffer c;
 	  string lexbuf }
   | eof     { raise (Lexing_error "unterminated string") }
+
+and between_slashes = parse
+  | [' ' '\t' '\r']   { between_slashes lexbuf }
+  | "\\"              { string lexbuf }
+  | "\n"              { new_line lexbuf ; between_slashes lexbuf }
+  | _                 { raise (Lexing_error "\\ was never closed in string") }

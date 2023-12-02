@@ -17,10 +17,10 @@
 %token SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
-%token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS
+%token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS POINT
 %token DATA CLASS WHERE INSTANCE
 %token IF THEN ELSE DO LET IN CASE OF FORALL 
-%token SEMICOLON VBAR
+%token SEMICOLON VBAR COMMA
 %token EOF
 %token UNITARY_MINUS
 
@@ -54,8 +54,11 @@ imports: IMPORTS {};
 
 decl:
 | d = defn                      { Defn d }
-;
-(*| DATA 
+(*
+| t = tdecl                     { Dtdecl t }
+*)
+(*
+| DATA 
   name=uident
   params=list(lident) 
   SIMPLE_EQ 
@@ -65,14 +68,52 @@ decl:
   params=params;
   types=types
 }
-;*)
+*)
 
+| CLASS name=uident params=list(lident) WHERE LBRACK
+    defs=separated_list(SEMICOLON, defn)
+  RBRACK {
+    Dclass {
+      name;
+      params;
+      defs
+    }
+  }
+
+(*
+| INSTANCE inst=instance WHERE LBRACK 
+    l=separated_list(SEMICOLON, defn) 
+  RBRACK { Dinstance (inst, l) }
+*)
+;
+
+ntype_arrow: n=ntype DOUBLE_ARROW { n };
+type_arrow: t=typ SIMPLE_ARROW { t };
+tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
+
+tdecl:
+  name=lident DOUBLE_POINTS 
+  variables=option(tdecl_variables) 
+  ntypes=list(ntype_arrow) types=list(type_arrow) out_type=typ
+  { 
+    let variables = match variables with
+    | Some v -> v
+    | None -> []
+    in
+    {
+      name;
+      variables;
+      ntypes;
+      types;
+      out_type
+    }
+  }
 
 defn: name = lident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
 ;
 
-(*ntype:
+ntype:
 | id=uident l=list(atype) { (id, l) }
 ;
 atype:
@@ -84,7 +125,13 @@ typ:
 | a=atype  { Tatype a }
 | n=ntype  { Tntype n }
 ;
-*)
+
+instance:
+| n=ntype { Intype n }
+| n1=ntype DOUBLE_ARROW n2=ntype { Iarrow ([n1], n2)}
+| l=separated_nonempty_list(COMMA, ntype) 
+  DOUBLE_ARROW n=ntype { Iarrow (l, n) }
+;
 
 patarg: 
 | c = CST                       { Pconst c }
@@ -98,11 +145,11 @@ pattern:
 | id = uident l = nonempty_list(patarg) { Pnamedarg (id, l) }
 
 atom:
-| c = CST                       { Aconst c }
-| id = lident                   { Aident id }
-| id = uident                   { Aident id }
-| LPAREN e = expr RPAREN        { Aexpr e }
-(*| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN { Atypedexpr (e, t) }*)
+| c = CST                                   { Aconst c }
+| id = lident                               { Aident id }
+| id = uident                               { Aident id }
+| LPAREN e = expr RPAREN                    { Aexpr e }
+(*| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }*)
 ;
 
 expr:
@@ -112,7 +159,7 @@ expr:
 | id = lident a = nonempty_list(atom)           { Efunc (id, a) }
 | id = uident a = nonempty_list(atom)           { Efunc (id, a) }
 | IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
-| DO LBRACK el=separated_nonempty_list(SEMICOLON, expr) RBRACK       
+| DO LBRACK el=separated_nonempty_list(SEMICOLON, expr) RBRACK
                                                 { Edo el }
 | LET LBRACK b=separated_nonempty_list(SEMICOLON, binding) RBRACK IN e=expr
                                                 { Elet (b, e)}

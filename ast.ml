@@ -68,7 +68,7 @@ type decl =
 | Defn of defn
 | Dtdecl of tdecl
 | Dclass of clas
-| Dinstace of instance * (defn list)
+| Dinstance of instance * (defn list)
 
 and tdecl = {
   name: ident;
