@@ -67,6 +67,7 @@ type defn = ident * patarg list * expr
 type decl = 
 | Defn of defn
 | Dtdecl of tdecl
+| Ddata of data
 | Dclass of clas
 | Dinstance of instance * (defn list)
 

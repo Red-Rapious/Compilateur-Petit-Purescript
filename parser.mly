@@ -13,8 +13,7 @@
 %token LPAREN RPAREN
 %token PLUS MINUS TIMES DIV
 %token AND OR
-%token DOUBLE_EQ NEQ
-%token SIMPLE_EQ
+%token DOUBLE_EQ SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
 %token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS POINT
@@ -25,13 +24,13 @@
 %token UNITARY_MINUS
 
 /* Priorités et associativités des tokens */
+%nonassoc IN ELSE
 %left OR 
 %left AND
-%nonassoc DOUBLE_EQ NEQ LPAREN RPAREN LBRACK RBRACK CMP
+%nonassoc DOUBLE_EQ NEQ CMP
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc UNITARY_MINUS
-%nonassoc IF ELSE IN
 
 /* Point d'entrée de la grammaire */
 %start file
@@ -52,24 +51,23 @@ file:
 
 imports: IMPORTS {};
 
+data_types: id=uident l=list(atype) { (id, l) };
+
 decl:
 | d = defn                      { Defn d }
-(*
 | t = tdecl                     { Dtdecl t }
-*)
-(*
 | DATA 
   name=uident
   params=list(lident) 
   SIMPLE_EQ 
-  types=separated_nonempty_list(VBAR, uident atype)
+  types=separated_nonempty_list(VBAR, data_types)
 {
-  name=name;
-  params=params;
-  types=types
+  Ddata {
+    name;
+    params;
+    types
+  }
 }
-*)
-
 | CLASS name=uident params=list(lident) WHERE LBRACK
     defs=separated_list(SEMICOLON, defn)
   RBRACK {
@@ -79,12 +77,10 @@ decl:
       defs
     }
   }
-
-(*
 | INSTANCE inst=instance WHERE LBRACK 
     l=separated_list(SEMICOLON, defn) 
   RBRACK { Dinstance (inst, l) }
-*)
+
 ;
 
 ntype_arrow: n=ntype DOUBLE_ARROW { n };
@@ -114,7 +110,8 @@ defn: name = lident args = list(patarg) SIMPLE_EQ e = expr
 ;
 
 ntype:
-| id=uident l=list(atype) { (id, l) }
+(* TODO: change to empty list *)
+| id=uident l=nonempty_list(atype) { (id, l) }
 ;
 atype:
 | id=uident { Tident id }
@@ -149,7 +146,7 @@ atom:
 | id = lident                               { Aident id }
 | id = uident                               { Aident id }
 | LPAREN e = expr RPAREN                    { Aexpr e }
-(*| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }*)
+| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }
 ;
 
 expr:
