@@ -88,9 +88,10 @@ type_arrow: t=typ SIMPLE_ARROW { t };
 tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
 
 tdecl:
-  name=lident DOUBLE_POINTS 
+ | name=lident DOUBLE_POINTS 
   variables=option(tdecl_variables) 
-  ntypes=list(ntype_arrow) types=list(type_arrow) out_type=typ
+  ntypes=list(ntype_arrow) types=list(type_arrow) (* ICI RÉSIDE LE PROBLÈME *)
+  out_type=typ
   { 
     let variables = match variables with
     | Some v -> v
@@ -104,22 +105,24 @@ tdecl:
       out_type
     }
   }
+;
 
 defn: name = lident args = list(patarg) SIMPLE_EQ e = expr 
   { (name, args, e) }
 ;
 
 ntype:
-| id=uident l=nonempty_list(atype) { (id, l) }
+| id=uident l=list(atype) { (id, l) }
 ;
 atype:
-| id=uident { Tident id }
-| id=lident { Tident id }
+| id=uident           { Tident id }
+| id=lident           { Tident id }
 | LPAREN t=typ RPAREN { Ttype t }
 ;
 typ:
-| a=atype  { Tatype a }
-| n=ntype  { Tntype n }
+| a=atype                          { Tatype a }
+| id=uident l=nonempty_list(atype) { Tntype (id, l) }
+(*| n=ntype  { Tntype n }*)
 ;
 
 instance:

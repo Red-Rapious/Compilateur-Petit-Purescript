@@ -5,7 +5,7 @@ echo -n "== BONS ==\n"
 for f in tests-10-nov/syntax/good/*.purs; do
     echo -n ".";
     max=`expr $max + 1`;
-    ./ppurs --parse-only $f;
+    ./ppurs --parse-only $f 2>/dev/null;
     case $? in
 	"1")
 	echo
