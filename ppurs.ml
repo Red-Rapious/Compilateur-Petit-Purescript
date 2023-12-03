@@ -58,10 +58,16 @@ let () =
     (*Interp.prog p*)
   with
     (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
-  | Lexer.Lexing_error c ->
-    localisation (Lexing.lexeme_start_p buf);
-    eprintf "Erreur lexicale: %s@." c;
-    exit 1
+    | Lexer.Lexing_error c ->
+      localisation (Lexing.lexeme_start_p buf);
+      eprintf "Erreur lexicale: %s@." c;
+      exit 1
+
+    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    | Indenter.IndentationError c ->
+      localisation (Lexing.lexeme_start_p buf);
+      eprintf "Erreur d'indentation: %s@." c;
+      exit 1
     
     (* Erreur syntaxique. On récupère sa position absolue et on la convertit en numéro de ligne *)
     | Parser.Error ->
