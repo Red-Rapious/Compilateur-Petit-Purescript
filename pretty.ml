@@ -30,7 +30,9 @@ let print_token t = match t with
 | AND -> "&& "
 | OR -> "|| "
 | DOUBLE_EQ -> "== "
-| NEQ -> "!= "
+(*| NEQ -> "!= "*)
+| POINT -> ". "
+| COMMA -> ", "
 | SIMPLE_EQ -> "= "
 | CONCAT -> "<> "
 | LBRACK -> "{\n\t"

@@ -45,7 +45,7 @@ uident: id = UIDENT { id };
 
 /* Règles de grammaire */
 file:
-  MODULE_MAIN i=imports d=separated_list(SEMICOLON, decl) EOF
+  MODULE_MAIN i=imports d=separated_nonempty_list(SEMICOLON, decl) EOF
     { { main = d } }
 ;
 
@@ -110,7 +110,6 @@ defn: name = lident args = list(patarg) SIMPLE_EQ e = expr
 ;
 
 ntype:
-(* TODO: change to empty list *)
 | id=uident l=nonempty_list(atype) { (id, l) }
 ;
 atype:
@@ -126,7 +125,7 @@ typ:
 instance:
 | n=ntype { Intype n }
 | n1=ntype DOUBLE_ARROW n2=ntype { Iarrow ([n1], n2)}
-| l=separated_nonempty_list(COMMA, ntype) 
+| LPAREN l=separated_nonempty_list(COMMA, ntype) RPAREN
   DOUBLE_ARROW n=ntype { Iarrow (l, n) }
 ;
 
@@ -167,11 +166,12 @@ binding: id = lident  SIMPLE_EQ    e = expr { (id, e) }
 branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
 
 %inline binop:
-| PLUS  { Badd }
-| MINUS { Bsub }
-| TIMES { Bmul }
-| DIV   { Bdiv }
-| c=CMP { c    }
-| AND   { Band }
-| OR    { Bor  }
+| CONCAT { Bconcat }
+| PLUS   { Badd }
+| MINUS  { Bsub }
+| TIMES  { Bmul }
+| DIV    { Bdiv }
+| c=CMP  { c    }
+| AND    { Band }
+| OR     { Bor  }
 ;
