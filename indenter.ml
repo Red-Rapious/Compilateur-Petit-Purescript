@@ -55,7 +55,7 @@ let rec traiter_lexeme strong l buf =
     if strong then fermer c' ;
     Stack.push (B c') pile ;
     traiter_lexeme false t buf
-  | EOF -> if strong then fermer (-1) ; Queue.push l file
+  | EOF -> if strong then fermer 0 ; Queue.push l file
   | _ -> if strong then fermer c ; Queue.push l file
 
 let rec indent strong buf : token =

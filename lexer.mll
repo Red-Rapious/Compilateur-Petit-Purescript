@@ -94,6 +94,7 @@ and string = parse
     let s = Buffer.contents string_buffer in
 	  Buffer.reset string_buffer;
 	  s }
+  | "\n"    { raise (Lexing_error "\\n inside a string outside of a \\ block")}
   | "\\n"   { 
     Buffer.add_char string_buffer '\n';
 	  string lexbuf }

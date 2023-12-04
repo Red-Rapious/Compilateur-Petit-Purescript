@@ -84,14 +84,27 @@ decl:
 ;
 
 ntype_arrow: n=ntype DOUBLE_ARROW { n };
+ntype_arrow_list: ntypes=list(ntype_arrow) { ntypes }
 type_arrow: t=typ SIMPLE_ARROW { t };
+type_arrow_list: types=list(type_arrow) { types }
 tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
+tdecl_end:
+  ntypes=ntype_arrow_list types=type_arrow_list (* ICI RÉSIDE LE PROBLÈME *)
+  out_type=typ {
+    {
+      name="";
+      variables=[];
+      ntypes;
+      types;
+      out_type
+    }
+  }
+
 
 tdecl:
  | name=lident DOUBLE_POINTS 
   variables=option(tdecl_variables) 
-  ntypes=list(ntype_arrow) types=list(type_arrow) (* ICI RÉSIDE LE PROBLÈME *)
-  out_type=typ
+  tend=tdecl_end
   { 
     let variables = match variables with
     | Some v -> v
@@ -100,9 +113,9 @@ tdecl:
     {
       name;
       variables;
-      ntypes;
-      types;
-      out_type
+      ntypes=tend.ntypes;
+      types=tend.types;
+      out_type=tend.out_type
     }
   }
 ;
