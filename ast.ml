@@ -1,3 +1,5 @@
+type loc = Lexing.position * Lexing.position
+
 type ident = string
 
 type binop =
@@ -37,32 +39,35 @@ type patarg =
 | Pconst of constant 
 | Pident of ident
 | Ppattern of pattern
+and loc_patarg = loc * patarg
 
 and pattern = 
 | Parg of patarg
 | Pnamedarg of ident * (patarg list)
 
 type expr =
-| Eatom of atom
-| Eunop of unop * expr
-| Ebinop of expr * binop * expr
-| Efunc of ident * (atom list)
-| Eif of expr * expr * expr
-| Edo of expr list
-| Elet of  binding list * expr
-| Ecase of expr * (branch list)
+| Eatom of loc_atom
+| Eunop of unop * loc_expr
+| Ebinop of loc_expr * binop * loc_expr
+| Efunc of ident * (loc_atom list)
+| Eif of loc_expr * loc_expr * loc_expr
+| Edo of loc_expr list
+| Elet of  binding list * loc_expr
+| Ecase of loc_expr * (branch list)
+and loc_expr = loc * expr
 
 and atom = 
 | Aconst of constant 
 | Aident of ident 
-| Aexpr of expr
-| Atypedexpr of expr * typ
+| Aexpr of loc_expr
+| Atypedexpr of loc_expr * typ
+and loc_atom = loc * atom
 
-and branch = pattern * expr
+and branch = pattern * loc_expr
 
-and binding = ident * expr
+and binding = ident * loc_expr
 
-type defn = ident * patarg list * expr
+type defn = ident * patarg list * loc_expr
 
 type decl = 
 | Defn of defn

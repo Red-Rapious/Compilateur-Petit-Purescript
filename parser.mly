@@ -37,6 +37,9 @@
 
 /* Type des valeurs renvoyées par l'analyseur syntaxique */
 %type <Ast.file> file
+%type <Ast.loc_expr> loc_expr
+%type <Ast.loc_atom> loc_atom
+%type <Ast.loc_patarg> loc_patarg
 
 %%
 
@@ -120,7 +123,7 @@ tdecl:
   }
 ;
 
-defn: name = lident args = list(patarg) SIMPLE_EQ e = expr 
+defn: name = lident args = list(patarg) SIMPLE_EQ e = loc_expr 
   { (name, args, e) }
 ;
 
@@ -145,6 +148,7 @@ instance:
   DOUBLE_ARROW n=ntype { Iarrow (l, n) }
 ;
 
+loc_patarg: p=patarg { ($loc, p) };
 patarg: 
 | c = CST                       { Pconst c }
 | id = lident                   { Pident id }
@@ -156,30 +160,32 @@ pattern:
 | p = patarg                    { Parg p }
 | id = uident l = nonempty_list(patarg) { Pnamedarg (id, l) }
 
+loc_atom: a=atom { ($loc, a) };
 atom:
 | c = CST                                   { Aconst c }
 | id = lident                               { Aident id }
 | id = uident                               { Aident id }
-| LPAREN e = expr RPAREN                    { Aexpr e }
-| LPAREN e=expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }
+| LPAREN e=loc_expr RPAREN                      { Aexpr e }
+| LPAREN e=loc_expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }
 ;
 
+loc_expr: e=expr { ($loc, e) };
 expr:
-| a = atom                                      { Eatom a }
-| MINUS e = expr %prec UNITARY_MINUS            { Eunop (Uneg, e) }
-| e1 = expr o = binop e2 = expr                 { Ebinop (e1, o, e2) }
-| id = lident a = nonempty_list(atom)           { Efunc (id, a) }
-| id = uident a = nonempty_list(atom)           { Efunc (id, a) }
-| IF e1=expr THEN e2=expr ELSE e3=expr          { Eif (e1, e2, e3) }
-| DO LBRACK el=separated_nonempty_list(SEMICOLON, expr) RBRACK
+| a = loc_atom                                  { Eatom a }
+| MINUS e = loc_expr %prec UNITARY_MINUS            { Eunop (Uneg, e) }
+| e1 = loc_expr o = binop e2 = loc_expr                 { Ebinop (e1, o, e2) }
+| id = lident a = nonempty_list(loc_atom)           { Efunc (id, a) }
+| id = uident a = nonempty_list(loc_atom)           { Efunc (id, a) }
+| IF e1=loc_expr THEN e2=loc_expr ELSE e3=loc_expr          { Eif (e1, e2, e3) }
+| DO LBRACK el=separated_nonempty_list(SEMICOLON, loc_expr) RBRACK
                                                 { Edo el }
-| LET LBRACK b=separated_nonempty_list(SEMICOLON, binding) RBRACK IN e=expr
+| LET LBRACK b=separated_nonempty_list(SEMICOLON, binding) RBRACK IN e=loc_expr
                                                 { Elet (b, e)}
-| CASE e=expr OF LBRACK b=separated_nonempty_list(SEMICOLON, branch) RBRACK
+| CASE e=loc_expr OF LBRACK b=separated_nonempty_list(SEMICOLON, branch) RBRACK
                                                 { Ecase (e, b) }
 
-binding: id = lident  SIMPLE_EQ    e = expr { (id, e) }
-branch:  p = pattern SIMPLE_ARROW e = expr { (p, e) }
+binding: id = lident  SIMPLE_EQ   e = loc_expr { (id, e) }
+branch:  p = pattern SIMPLE_ARROW e = loc_expr { (p, e) }
 
 %inline binop:
 | CONCAT { Bconcat }

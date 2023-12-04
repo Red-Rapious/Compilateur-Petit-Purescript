@@ -128,7 +128,8 @@ and ast_ntype env newtypes = function
   | id, h :: t -> TInt
   | id, [] -> TBool
 
-let rec typ_exp env newtypes expr =
+let rec typ_exp env newtypes loc_expr =
+  let (loc, expr) = loc_expr in
   match expr with
   | Eunop (_, e) -> (
       match typ_exp env newtypes e with
