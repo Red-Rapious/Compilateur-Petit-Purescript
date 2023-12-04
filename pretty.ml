@@ -66,3 +66,24 @@ let print_token t = match t with
   | Cint i -> string_of_int i ^ " "
   )
 | CMP binop -> print_binop binop
+
+let rec pp_typ fmt = function
+  | TArrow ([], t) -> Format.fprintf fmt "%a" pp_atom t
+  | TArrow (h :: t, t2) ->
+      Format.fprintf fmt "%a ->@ %a" pp_atom h pp_typ (TArrow (t, t2))
+  | (TInt | TVar _ | TUnit | TStr | TBool | TEffect _) as t -> pp_atom fmt t
+
+and pp_atom fmt = function
+  | TInt -> Format.fprintf fmt "Int"
+  | TUnit -> Format.fprintf fmt "Unit"
+  | TEffect t ->
+      Format.fprintf fmt "Effect ";
+      pp_typ fmt t
+  | TBool -> Format.fprintf fmt "Bool"
+  | TStr -> Format.fprintf fmt "String"
+  | TVar v -> pp_TVar fmt v
+  | TArrow _ as t -> Format.fprintf fmt "@[<1>(%a)@]" pp_typ t
+
+and pp_TVar fmt = function
+  | { def = None; id } -> Format.fprintf fmt "'%d" id
+  | { def = Some t; id } -> Format.fprintf fmt "@[<1>('%d := %a)@]" id pp_typ t
