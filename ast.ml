@@ -19,15 +19,6 @@ type unop = Uneg
 
 type constant = Cbool of bool | Cstring of string | Cint of int
 
-type patarg = 
-| Pconst of constant 
-| Pident of ident
-| Ppattern of pattern
-
-and pattern = 
-| Parg of patarg
-| Pnamedarg of ident * (patarg list)
-
 type atype = 
 | Tident of ident
 | Ttype of typ 
@@ -41,6 +32,15 @@ and typ =
 type instance =
 | Intype of ntype
 | Iarrow of (ntype list) * ntype
+
+type patarg = 
+| Pconst of constant 
+| Pident of ident
+| Ppattern of pattern
+
+and pattern = 
+| Parg of patarg
+| Pnamedarg of ident * (patarg list)
 
 type expr =
 | Eatom of atom
