@@ -92,3 +92,14 @@ and clas = {
 }
 
 type file = { main : decl list }
+
+type ttyp =
+  | TUnit
+  | TBool
+  | TInt
+  | TStr
+  | TEffect of ttyp
+  | TArrow of ttyp list * ttyp
+  | TVar of tvar
+
+and tvar = { id : int; mutable def : ttyp option }

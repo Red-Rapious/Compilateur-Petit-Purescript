@@ -1,16 +1,5 @@
 open Ast
 
-type typ =
-  | TUnit
-  | TBool
-  | TInt
-  | TStr
-  | TEffect of typ
-  | TArrow of typ list * typ
-  | TVar of tvar
-
-and tvar = { id : int; mutable def : typ option }
-
 let rec typ_eq t1 t2 =
   match (t1, t2) with
   | TUnit, TUnit | TStr, TStr | TInt, TInt | TBool, TBool -> true
@@ -26,7 +15,7 @@ let rec typ_eq t1 t2 =
 
 module Smap = Map.Make (Int)
 
-type env = typ Smap.t
+type env = ttyp Smap.t
 
 module V = struct
   type t = tvar
@@ -71,7 +60,7 @@ and pp_TVar fmt = function
   | { def = None; id } -> Format.fprintf fmt "'%d" id
   | { def = Some t; id } -> Format.fprintf fmt "@[<1>('%d := %a)@]" id pp_typ t
 
-exception UnificationFailure of typ * typ
+exception UnificationFailure of ttyp * ttyp
 
 let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
 
@@ -108,7 +97,7 @@ let rec fvars t =
 let norm_varset s =
   Vset.fold (fun v s -> Vset.union (fvars (TVar v)) s) s Vset.empty
 
-type schema = { vars : Vset.t; typ : typ }
+type schema = { vars : Vset.t; ttyp : ttyp }
 
 module Smap = Map.Make (String)
 
@@ -121,8 +110,8 @@ let add gen x t env =
   let s, fvars =
     if gen then
       let env_fvars = norm_varset env.fvars in
-      ({ vars = Vset.diff vt env_fvars; typ = t }, env.fvars)
-    else ({ vars = Vset.empty; typ = t }, Vset.union env.fvars vt)
+      ({ vars = Vset.diff vt env_fvars; ttyp = t }, env.fvars)
+    else ({ vars = Vset.empty; ttyp = t }, Vset.union env.fvars vt)
   in
   { bindings = Smap.add x s env.bindings; fvars }
 
@@ -140,7 +129,7 @@ let find x env =
     | TEffect t -> TEffect (subst t)
     | TArrow (t1, t2) -> TArrow (List.map subst t1, subst t2)
   in
-  subst tx.typ
+  subst tx.ttyp
 
 let rec ast_type env newtypes = function
   | Tatype a -> ast_atype env newtypes a
@@ -277,6 +266,8 @@ let rec well_formed_declaration env newtypes declaration =
     | [] -> ()
   in run declaration.variables;
   List.for_all (fun i -> well_formed_instance env newtypes (Intype i  )) declaration.ntypes && List.for_all (fun i-> well_formed_typ env newtypes i) declaration.types 
+
+and well_formed_typ = failwith "todo"
 
 and well_formed_instance env newtypes = function
   | Intype n ->  true
