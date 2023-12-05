@@ -85,6 +85,16 @@ let () =
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
+    | Typing.Empty_pattern_matching l ->
+      type_localisation l ;
+      eprintf "Pattern matching vide." ;
+      exit 1
+
+    | Typing.Unknown_ident (l, id) ->
+      type_localisation l ;
+      eprintf "Identifiant inconnu : %s@." id ;
+      exit 1
+
     | e ->
-      eprintf "Erreur du compilateur : %s\n@." (Printexc.to_string e);
+      eprintf "Erreur interne du compilateur : %s\n@." (Printexc.to_string e);
       exit 2

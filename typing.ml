@@ -46,6 +46,10 @@ let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
 exception Typing_error of loc * string
 let typing_error loc s = raise (Typing_error (loc, s))
 
+exception Empty_pattern_matching of loc
+
+exception Unknown_ident of loc * Ast.ident
+
 let rec occur v t =
   match head t with
   | TVar w -> V.equal v w
@@ -179,13 +183,13 @@ let rec typ_exp env newtypes loc_expr =
     )
   | Eatom a -> TInt
   | Edo l ->
-      if
-        List.for_all
-          (fun e -> typ_eq (typ_exp env newtypes e) (TEffect TUnit))
-          l
-      then TEffect TUnit
-      else failwith "Erreur : Implémenter la localisation"
-  | Ecase (e, []) -> failwith "Empty Pattern Matching bro"
+      List.iter
+          (fun e -> 
+            if not (typ_eq (typ_exp env newtypes e) (TEffect TUnit)) 
+            then typing_error (fst e) "le type attendu est Unit")
+          l ;
+      TEffect TUnit
+  | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
   | Ecase (e, l) ->
       let t = typ_exp env newtypes e in
       let rettypes = List.map (fun x -> typ_branch env newtypes x) l in
@@ -201,17 +205,20 @@ let rec typ_exp env newtypes loc_expr =
         newtypes e
   | _ -> TInt
 
-and typ_atom env ntypes = function
+and typ_atom env ntypes (l, a) =
+  match a with
   | Aconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Aident id -> (
       try find id env
-      with Not_found -> failwith "Erreur : Implémenter la localisation")
+      with Not_found -> raise (Unknown_ident (l, id))
+    )
   | Aexpr e -> typ_exp env ntypes e
   | Atypedexpr (e, tau) ->
       let t = ast_type env ntypes tau in
       if typ_eq t (typ_exp env ntypes e) then t
-      else failwith "Erreur : Implémenter la localisation"
+      (* TODO: spécifier les deux types *)
+      else typing_error (fst e) "l'expression n'est pas du type spécifié"
 
 and typ_branch env ntypes (p, e) = typ_pattern env ntypes p, typ_exp env ntypes e
 (*and typ_branch env ntypes (p, e) = function
@@ -228,15 +235,16 @@ and typ_branch env ntypes (p, e) = typ_pattern env ntypes p, typ_exp env ntypes 
          for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
 and typ_pattern env ntypes = function
-  | Parg p -> typ_patarg env ntypes p
+  | Parg (l, p) -> typ_patarg env ntypes (l, p)
   | Pnamedarg (id, l) -> TBool (*Pas compris encore*)
 
-and typ_patarg env ntypes = function
+and typ_patarg env ntypes (l, p) = 
+  match p with
   | Pconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Pident id -> (
       try find id env
-      with Not_found -> failwith "Erreur : Implémenter la Localisation")
+      with Not_found -> raise (Unknown_ident (l, id)))
   | Ppattern p -> typ_pattern env ntypes p
 
 and typ_binding env newtypes = function

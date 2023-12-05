@@ -42,7 +42,7 @@ type patarg =
 and loc_patarg = loc * patarg
 
 and pattern = 
-| Parg of patarg
+| Parg of loc_patarg
 | Pnamedarg of ident * (patarg list)
 
 type expr =

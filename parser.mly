@@ -157,14 +157,14 @@ patarg:
 ;
 
 pattern:
-| p = patarg                    { Parg p }
+| p = loc_patarg                        { Parg p }
 | id = uident l = nonempty_list(patarg) { Pnamedarg (id, l) }
 
 loc_atom: a=atom { ($loc, a) };
 atom:
-| c = CST                                   { Aconst c }
-| id = lident                               { Aident id }
-| id = uident                               { Aident id }
+| c = CST                                       { Aconst c }
+| id = lident                                   { Aident id }
+| id = uident                                   { Aident id }
 | LPAREN e=loc_expr RPAREN                      { Aexpr e }
 | LPAREN e=loc_expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }
 ;
