@@ -59,7 +59,10 @@ let () =
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
-    failwith "Erreur: seul le parsing est implémenté pour l'instant"
+    failwith "Erreur: seul le parsing est implémenté pour l'instant" (**;
+
+    if !type_only then exit 0;
+    failwith "La production de code n'est pas implémentée pour l'instant"*)
     (*Interp.prog p*)
   with
     (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)

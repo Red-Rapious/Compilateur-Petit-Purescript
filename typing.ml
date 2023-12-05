@@ -1,4 +1,5 @@
 open Ast
+open Pretty
 
 let rec typ_eq t1 t2 =
   match (t1, t2) with
@@ -140,7 +141,7 @@ let rec typ_exp env newtypes loc_expr =
   | Eunop (_, e) -> (
       match typ_exp env newtypes e with
       | TInt -> TInt
-      | _ -> typing_error (fst e) "mauvaise opérande pour l'opérateur unaire '-' : le type attendu est Int")
+      | _ -> typing_error (fst e) "mauvais opérande pour l'opérateur unaire '-' : le type attendu est Int")
   | Eif (e1, e2, e3) -> (
       match typ_exp env newtypes e1 with
       | TBool ->
@@ -152,33 +153,33 @@ let rec typ_exp env newtypes loc_expr =
   | Ebinop (e1, op, e2) -> (
       let s1 = typ_exp env newtypes e1 in
       let s2 = typ_exp env newtypes e2 in
-      if s1 <> s2 then typing_error (fst e2) "mauvaise opérande pour un opérateur binaire : les deux types doivent être identiques" ;
-      (* TODO: préciser l'opérateur binaire *)
+      let binop_string = Pretty.print_binop op in
+      if s1 <> s2 then typing_error (fst e2) ("mauvais opérande pour '" ^ binop_string ^ "' : les deux types doivent être identiques") ;
       match op with
       | Beq | Bneq -> (
           match s1 with
           | TInt | TBool | TStr -> TBool
-          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions comparées doivent être de type Int, String ou Bool"
+          | _ -> typing_error (fst e1) ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions comparées doivent être de type Int, String ou Bool")
         )
       | Blt | Ble | Bgt | Bge -> (
           match s1 with
           | TInt -> TBool
-          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions comparées doivent être de type Int"
+          | _ -> typing_error (fst e1) ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions comparées doivent être de type Int")
         )
       | Bsub | Badd | Bmul | Bdiv -> (
           match s1 with
           | TInt -> TInt
-          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions manipulées doivent être de type Int"
+          | _ -> typing_error (fst e1) ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions manipulées doivent être de type Int")
         )
       | Bconcat -> (
           match s1 with
           | TStr -> TStr
-          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions concaténées doivent être de type Str"
+          | _ -> typing_error (fst e1) ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions concaténées doivent être de type Str")
         )
       | Band | Bor -> (
           match s1 with
           | TBool -> TBool
-          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions manipulées doivent être de type Bool"
+          | _ -> typing_error (fst e1) ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions manipulées doivent être de type Bool")
         )
     )
   | Eatom a -> TInt
@@ -194,11 +195,12 @@ let rec typ_exp env newtypes loc_expr =
       let t = typ_exp env newtypes e in
       let rettypes = List.map (fun x -> typ_branch env newtypes x) l in
       let tret = snd (List.hd rettypes) in
-      if
-        List.for_all (fun x -> typ_eq t (fst x)) rettypes
-        && List.for_all (fun x -> typ_eq tret (snd x)) rettypes
-      then tret
-      else failwith "Erreur : Implémenter la Localisation"
+      (* TODO: préciser encore plus quelle branche est mal typée *)
+      List.iter (fun x -> 
+        if not (typ_eq t (fst x) && typ_eq tret (snd x)) 
+          then typing_error (fst e) "l'expression n'est pas du même type que le pattern de la branche"
+      ) rettypes ;
+      tret
   | Elet (bl, e) ->
       typ_exp
         (List.fold_left (fun env x -> typ_binding env newtypes x) env bl)
@@ -218,7 +220,7 @@ and typ_atom env ntypes (l, a) =
       let t = ast_type env ntypes tau in
       if typ_eq t (typ_exp env ntypes e) then t
       (* TODO: spécifier les deux types *)
-      else typing_error (fst e) "l'expression n'est pas du type spécifié"
+      else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
 and typ_branch env ntypes (p, e) = typ_pattern env ntypes p, typ_exp env ntypes e
 (*and typ_branch env ntypes (p, e) = function
