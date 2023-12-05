@@ -239,7 +239,7 @@ and typ_patarg env ntypes = function
 and typ_binding env newtypes = function
   | id, e -> add true id (typ_exp env newtypes e) env
 
-
+  Domination
 let rec well_formed_declaration env newtypes declaration = 
   let table = Hashtbl.create (List.length declaration.variables) in
   let rec run = function
@@ -254,4 +254,5 @@ and well_formed_instance env newtypes = function
   | Intype n ->  true
   | _ -> false
   
+and well_formed_typ env newtypes = true
   
