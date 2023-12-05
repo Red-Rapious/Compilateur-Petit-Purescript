@@ -13,9 +13,9 @@ let rec typ_eq t1 t2 =
       | _, _ -> false)
   | _, _ -> false
 
-module Smap = Map.Make (Int)
+module Smapi = Map.Make (Int)
 
-type env = ttyp Smap.t
+type envi = ttyp Smapi.t
 
 module V = struct
   type t = tvar
@@ -41,8 +41,10 @@ let rec canon t =
 
 
 exception UnificationFailure of ttyp * ttyp
-
 let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
+
+exception Typing_error of loc * string
+let typing_error loc s = raise (Typing_error (loc, s))
 
 let rec occur v t =
   match head t with
@@ -79,11 +81,11 @@ let norm_varset s =
 
 type schema = { vars : Vset.t; ttyp : ttyp }
 
-module Smap = Map.Make (String)
+module Smaps = Map.Make (String)
 
-type env = { bindings : schema Smap.t; fvars : Vset.t }
+type envs = { bindings : schema Smaps.t; fvars : Vset.t }
 
-let empty = { bindings = Smap.empty; fvars = Vset.empty }
+let empty = { bindings = Smaps.empty; fvars = Vset.empty }
 
 let add gen x t env =
   let vt = fvars t in
@@ -93,12 +95,12 @@ let add gen x t env =
       ({ vars = Vset.diff vt env_fvars; ttyp = t }, env.fvars)
     else ({ vars = Vset.empty; ttyp = t }, Vset.union env.fvars vt)
   in
-  { bindings = Smap.add x s env.bindings; fvars }
+  { bindings = Smaps.add x s env.bindings; fvars }
 
 module Vmap = Map.Make (V)
 
 let find x env =
-  let tx = Smap.find x env.bindings in
+  let tx = Smaps.find x env.bindings in
   let s =
     Vset.fold (fun v s -> Vmap.add v (TVar (V.create ())) s) tx.vars Vmap.empty
   in
@@ -134,47 +136,47 @@ let rec typ_exp env newtypes loc_expr =
   | Eunop (_, e) -> (
       match typ_exp env newtypes e with
       | TInt -> TInt
-      | _ -> failwith "Erreur : Implémenter la localisation")
+      | _ -> typing_error (fst e) "mauvaise opérande pour l'opérateur unaire '-' : le type attendu est Int")
   | Eif (e1, e2, e3) -> (
       match typ_exp env newtypes e1 with
       | TBool ->
           let s2 = typ_exp env newtypes e2 in
           let s3 = typ_exp env newtypes e3 in
           if s2 == s3 then s2
-          else failwith "Erreur : Implémenter la localisation"
-      | _ -> failwith "Erreur : Implémenter la localisation")
+          else typing_error (fst e3) "les deux branches doivent être de même type"
+      | _ -> typing_error (fst e1) "mauvais type de l'expression de condition : le type attendu est Bool")
   | Ebinop (e1, op, e2) -> (
+      let s1 = typ_exp env newtypes e1 in
+      let s2 = typ_exp env newtypes e2 in
+      if s1 <> s2 then typing_error (fst e2) "mauvaise opérande pour un opérateur binaire : les deux types doivent être identiques" ;
+      (* TODO: préciser l'opérateur binaire *)
       match op with
       | Beq | Bneq -> (
-          let s1 = typ_exp env newtypes e1 in
-          let s2 = typ_exp env newtypes e2 in
-          match (s1, s2) with
-          | TInt, TInt | TBool, TBool | TStr, TStr -> TBool
-          | _ -> failwith "Erreur : Implémenter la localisation")
+          match s1 with
+          | TInt | TBool | TStr -> TBool
+          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions comparées doivent être de type Int, String ou Bool"
+        )
       | Blt | Ble | Bgt | Bge -> (
-          let s1 = typ_exp env newtypes e1 in
-          let s2 = typ_exp env newtypes e2 in
-          match (s1, s2) with
-          | TInt, TInt -> TBool
-          | _ -> failwith "Erreur : Implémenter la localisation")
+          match s1 with
+          | TInt -> TBool
+          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions comparées doivent être de type Int"
+        )
       | Bsub | Badd | Bmul | Bdiv -> (
-          let s1 = typ_exp env newtypes e1 in
-          let s2 = typ_exp env newtypes e2 in
-          match (s1, s2) with
-          | TInt, TInt -> TInt
-          | _ -> failwith "Erreur : Implémenter la localisation")
+          match s1 with
+          | TInt -> TInt
+          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions manipulées doivent être de type Int"
+        )
       | Bconcat -> (
-          let s1 = typ_exp env newtypes e1 in
-          let s2 = typ_exp env newtypes e2 in
-          match (s1, s2) with
-          | TStr, TStr -> TStr
-          | _ -> failwith "Erreur : Implémenter la localisation")
+          match s1 with
+          | TStr -> TStr
+          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions concaténées doivent être de type Str"
+        )
       | Band | Bor -> (
-          let s1 = typ_exp env newtypes e1 in
-          let s2 = typ_exp env newtypes e2 in
-          match (s1, s2) with
-          | TBool, TBool -> TBool
-          | _ -> failwith "Erreur : Implémenter la localisation"))
+          match s1 with
+          | TBool -> TBool
+          | _ -> typing_error (fst e1) "mauvaise opérande pour un opérateur binaire : les expressions manipulées doivent être de type Bool"
+        )
+    )
   | Eatom a -> TInt
   | Edo l ->
       if
@@ -211,7 +213,8 @@ and typ_atom env ntypes = function
       if typ_eq t (typ_exp env ntypes e) then t
       else failwith "Erreur : Implémenter la localisation"
 
-and typ_branch env ntypes = function
+and typ_branch env ntypes (p, e) = typ_pattern env ntypes p, typ_exp env ntypes e
+(*and typ_branch env ntypes (p, e) = function
   | p, e -> (typ_pattern env ntypes p, typ_exp env ntypes e)
   | _ ->
       (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
@@ -222,7 +225,7 @@ and typ_branch env ntypes = function
          for me I live with that every day. That's the same thing as if I put \
          the bullet in his head myself, you understand? I spent all these \
          years being the good guy, you know the man in the white fucking hat, \
-         for what? For nothing. I'm not becoming like them Maggie, I am them."
+         for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
 and typ_pattern env ntypes = function
   | Parg p -> typ_patarg env ntypes p

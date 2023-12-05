@@ -1,5 +1,6 @@
 open Format
 open Lexing
+open Typing
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
@@ -23,6 +24,10 @@ let localisation pos =
   let l = pos.pos_lnum in
   let c = pos.pos_cnum - pos.pos_bol + 1 in
   eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l (c-1) c
+
+let type_localisation l = localisation (fst l) 
+
+let big_localisation pos = failwith "todo"
 
 let () =
   (* Parsing de la ligne de commande *)
@@ -60,22 +65,26 @@ let () =
     (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
     | Lexer.Lexing_error c ->
       localisation (Lexing.lexeme_start_p buf);
-      eprintf "Erreur lexicale: %s@." c;
+      eprintf "Erreur lexicale : %s@." c;
       exit 1
 
     (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
     | Indenter.IndentationError c ->
       localisation (Lexing.lexeme_start_p buf);
-      eprintf "Erreur d'indentation: %s@." c;
+      eprintf "Erreur d'indentation : %s@." c;
       exit 1
     
     (* Erreur syntaxique. On récupère sa position absolue et on la convertit en numéro de ligne *)
     | Parser.Error ->
-    localisation (Lexing.lexeme_start_p buf);
-    eprintf "Erreur syntaxique@.";
-    exit 1
-      
-    (* Erreur pendant l'interprétation *)
-    (*| Interp.Error s->
-    eprintf "Erreur : %s@." s;
-    exit 1*)
+      localisation (Lexing.lexeme_start_p buf);
+      eprintf "Erreur syntaxique@.";
+      exit 1
+
+    | Typing.Typing_error (l, s) ->
+      type_localisation l ;
+      eprintf "Erreur de typage : %s@." s;
+      exit 1
+
+    | e ->
+      eprintf "Erreur du compilateur : %s\n@." (Printexc.to_string e);
+      exit 2
