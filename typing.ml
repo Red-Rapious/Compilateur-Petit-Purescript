@@ -203,7 +203,7 @@ let rec typ_exp global_env local_env loc_expr =
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
-  | Eatom a -> typ_atom (loc, a)
+  | Eatom a -> typ_atom global_env local_env a
   | Edo l ->
       List.iter
         (fun e ->
@@ -229,40 +229,40 @@ let rec typ_exp global_env local_env loc_expr =
       typ_exp
         (List.fold_left (fun global_env x -> typ_binding global_env local_env x) global_env bl)
         local_env e
-  | _ -> TInt
+  | Efunc(id, al) -> let t1 = find id global_env in let t2 = List.map (fun x -> typ_atom global_env local_env x) al in let v = TVar(V.create()) in unify t1 (TArrow(t2, v)); v
 
-and typ_atom global_env ntypes (l, a) =
+and typ_atom global_env local_env (l, a) =
   match a with
   | Aconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Aident id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Aexpr e -> typ_exp global_env ntypes e
+  | Aexpr e -> typ_exp global_env local_env e
   | Atypedexpr (e, tau) ->
-      let t = ast_type global_env ntypes tau in
-      if typ_eq t (typ_exp global_env ntypes e) then t
+      let t = ast_type global_env local_env tau in
+      if typ_eq t (typ_exp global_env local_env e) then t
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
-and typ_pattern global_env ntypes = function
-  | Parg (l, p) -> typ_patarg global_env ntypes (l, p)
+and typ_pattern global_env local_env = function
+  | Parg (l, p) -> typ_patarg global_env local_env (l, p)
   | Pnamedarg (id, l) -> TBool (*Pas compris encore*)
 
-and typ_patarg global_env ntypes (l, p) =
+and typ_patarg global_env local_env (l, p) =
   match p with
   | Pconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Pident id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Ppattern p -> typ_pattern global_env ntypes p
+  | Ppattern p -> typ_pattern global_env local_env p
 
 and typ_binding global_env local_env = function
   | id, e -> add true id (typ_exp global_env local_env e) global_env
 
-and typ_branch global_env ntypes (p, e) =
-  (typ_pattern global_env ntypes p, typ_exp global_env ntypes e)
-(*and typ_branch global_env ntypes (p, e) = function
-  | p, e -> (typ_pattern global_env ntypes p, typ_exp global_env ntypes e)
+and typ_branch global_env local_env (p, e) =
+  (typ_pattern global_env local_env p, typ_exp global_env local_env e)
+(*and typ_branch global_env local_env (p, e) = function
+  | p, e -> (typ_pattern global_env local_env p, typ_exp global_env local_env e)
   | _ ->
       (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
       failwith
@@ -273,6 +273,9 @@ and typ_branch global_env ntypes (p, e) =
          the bullet in his head myself, you understand? I spent all these \
          years being the good guy, you know the man in the white fucking hat, \
          for what? For nothing. I'm not becoming like them Maggie, I am them."*)
+
+
+
 
 let rec well_formed_declaration global_env local_env declaration =
   let table = Hashtbl.create (List.length declaration.variables) in
@@ -291,8 +294,8 @@ let rec well_formed_declaration global_env local_env declaration =
 and well_formed_instance global_env local_env = function
   | Intype n -> true
   | Iarrow (nl, n) ->
-      if List.for_all (fun x -> well_formed_instance global_env local_env x) nl then
-        well_formed_typ n
+      if List.for_all (fun x -> well_formed_ntype global_env local_env x) nl then
+        well_formed_ntype global_env local_env n
       else false
 
 and well_formed_typ global_env local_env t =
@@ -303,18 +306,23 @@ and well_formed_typ global_env local_env t =
 and well_formed_atype global_env local_env = function
   | Tident id -> (
       try
-        find id local_env;
-        true
+        let _ = find id local_env in true
       with
-      | Not_found -> failwith "Type non défini"
-      | Ttype t -> well_formed_typ global_env local_env t)
+      | Not_found -> failwith "Type non défini")
+  | Ttype t -> well_formed_typ global_env local_env t
 
 and well_formed_ntype global_env local_env (id, al) =
-  try
-    let l = find id local_env in
-    List.length l == List.length al
-    && List.for_all (fun x -> well_formed_atype global_env) al
+  try (
+    let l = find id global_env in (*On vérifie que le constructeur étudié est bien défini*)
+    match l with
+    | TArrow(nl, n) -> (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
+    List.length nl == List.length al
+    && List.for_all (fun x -> well_formed_atype global_env local_env x) al
+    | _ -> failwith "Ceci n'est pas un constructeur")
   with Not_found -> failwith "Type non défini"
+
+
+
 
 
 (* Algorithme : 
