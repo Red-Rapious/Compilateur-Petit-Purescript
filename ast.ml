@@ -71,12 +71,12 @@ type defn = ident * patarg list * loc_expr
 
 type decl = 
 | Defn of defn
-| Dtdecl of tdecl
+| Dfdecl of fdecl
 | Ddata of data
 | Dclass of clas
 | Dinstance of instance * (defn list)
 
-and tdecl = {
+and fdecl = {
   name: ident;
   variables: ident list;
   ntypes: ntype list;

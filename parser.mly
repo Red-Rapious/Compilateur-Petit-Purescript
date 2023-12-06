@@ -58,7 +58,7 @@ data_types: id=uident l=list(atype) { (id, l) };
 
 decl:
 | d = defn                      { Defn d }
-| t = tdecl                     { Dtdecl t }
+| t = tdecl                     { Dfdecl t }
 | DATA 
   name=uident
   params=list(lident) 
