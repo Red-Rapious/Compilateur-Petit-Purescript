@@ -54,15 +54,16 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let _p = Parser.file (Indenter.indent true) buf  in
+    let p = Parser.file (Indenter.indent true) buf  in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
-    failwith "Erreur: seul le parsing est implémenté pour l'instant" (**;
+    
+    List.iter (fun d -> let _ = Typing.type_decl empty d in ()) p.main;
 
     if !type_only then exit 0;
-    failwith "La production de code n'est pas implémentée pour l'instant"*)
+    failwith "La production de code n'est pas implémentée pour l'instant"
     (*Interp.prog p*)
   with
     (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)

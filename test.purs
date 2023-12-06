@@ -3,4 +3,4 @@ import Prelude
 import Effect
 import Effect.Console
 
-main:: ((Effect Unit))
+main = 42
