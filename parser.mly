@@ -72,12 +72,12 @@ decl:
   }
 }
 | CLASS name=uident params=list(lident) WHERE LBRACK
-    defs=separated_list(SEMICOLON, defn)
+    decls=separated_list(SEMICOLON, tdecl)
   RBRACK {
     Dclass {
       name;
       params;
-      defs
+      decls
     }
   }
 | INSTANCE inst=instance WHERE LBRACK 
