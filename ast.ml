@@ -43,7 +43,7 @@ and loc_patarg = loc * patarg
 
 and pattern = 
 | Parg of loc_patarg
-| Pnamedarg of ident * (patarg list)
+| Pnamedarg of ident * (loc_patarg list)
 
 type expr =
 | Eatom of loc_atom
@@ -67,7 +67,7 @@ and branch = pattern * loc_expr
 
 and binding = ident * loc_expr
 
-type defn = ident * patarg list * loc_expr
+type defn = ident * loc_patarg list * loc_expr
 
 type decl = 
 | Defn of defn
@@ -106,5 +106,6 @@ type ttyp =
   | TEffect of ttyp
   | TArrow of ttyp list * ttyp
   | TVar of tvar
+  | TCons of ttyp list
 
 and tvar = { id : int; mutable def : ttyp option }

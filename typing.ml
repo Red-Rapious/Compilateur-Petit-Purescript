@@ -5,6 +5,7 @@ let rec typ_eq t1 t2 =
   match (t1, t2) with
   | TUnit, TUnit | TStr, TStr | TInt, TInt | TBool, TBool -> true
   | TEffect t1, TEffect t2 -> typ_eq t1 t2
+  | TCons t1, TCons t2 -> List.for_all2 typ_eq t1 t2
   | TArrow (t1, t2), TArrow (t3, t4) ->
       List.for_all2 typ_eq t1 t3 && typ_eq t2 t4
   | TVar t1, TVar t2 -> (
@@ -40,6 +41,7 @@ let rec canon t =
   | TVar { id = a; def = None } as t -> t
   | TVar { id = a; def = Some t } -> TVar { id = a; def = Some (canon t) }
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
+  | TCons t -> TCons(List.map canon t)
 
 exception UnificationFailure of ttyp * ttyp
 
@@ -69,6 +71,7 @@ let rec unify t1 t2 =
   | TArrow (t11, t12), TArrow (t21, t22) ->
       List.iter2 unify t11 t21;
       unify t12 t22
+  | TCons t1, TCons t2 -> List.iter2 unify t1 t2
   | TInt, TInt | TBool, TBool | TStr, TStr | TUnit, TUnit -> ()
   | TEffect t1, TEffect t2 when typ_eq t1 t2 -> ()
   | t1, t2 -> unification_error t1 t2
@@ -81,6 +84,7 @@ let rec fvars t =
   | TEffect t -> fvars t
   | TArrow (t1, t2) -> List.fold_left Vset.union (fvars t2) (List.map fvars t1)
   | TVar v -> Vset.singleton v
+  | TCons t -> List.fold_left Vset.union (Vset.empty) (List.map fvars t)
 
 let norm_varset s =
   Vset.fold (fun v s -> Vset.union (fvars (TVar v)) s) s Vset.empty
@@ -116,9 +120,11 @@ let find x global_env =
     | (TInt | TBool | TStr | TUnit) as t -> t
     | TEffect t -> TEffect (subst t)
     | TArrow (t1, t2) -> TArrow (List.map subst t1, subst t2)
+    | TCons t -> TCons(List.map subst t)
   in
   subst tx.ttyp
 
+  
 let rec ast_type global_env local_env = function
   | Tatype a -> ast_atype global_env local_env a
   | Tntype n -> ast_ntype global_env local_env n
@@ -131,10 +137,10 @@ and ast_atype global_env local_env = function
   | Ttype t -> ast_type global_env local_env t
   | _ -> TBool
 
-and ast_ntype global_env local_env = function
-  (*Pakomprienfét*)
-  | id, h :: t -> TInt
-  | id, [] -> TBool
+and ast_ntype global_env local_env (id, l) =
+  let cons_arg = List.map (ast_atype global_env local_env) l in
+  TCons(cons_arg)
+
 
 let rec typ_exp global_env local_env loc_expr =
   let loc, expr = loc_expr in
@@ -315,11 +321,17 @@ and well_formed_ntype global_env local_env (id, al) =
   try (
     let l = find id global_env in (*On vérifie que le constructeur étudié est bien défini*)
     match l with
-    | TArrow(nl, n) -> (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
+    | TCons(nl) -> (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
     List.length nl == List.length al
     && List.for_all (fun x -> well_formed_atype global_env local_env x) al
     | _ -> failwith "Ceci n'est pas un constructeur")
   with Not_found -> failwith "Type non défini"
+
+
+
+
+
+
 
 
 
@@ -332,10 +344,10 @@ and well_formed_ntype global_env local_env (id, al) =
   - A chaque fois qu'on doit vérifier un jugement bien formé, on crée un environnement local spécifique. 
 *)
 
-let type_decl global_env local_env decl =
+let type_decl global_env decl =
   match decl with
-  | Defn d -> ()
-  | Dfdecl d -> ()
-  | Ddata d -> ()
-  | Dclass d -> ()
-  | Dinstance (i, dl) -> ()
+  | Defn ((id, plist, exp)) -> add false id (typ_exp global_env empty exp) global_env 
+  | Dfdecl {name = id; variables = idl; ntypes = nl; types = tl; out_type = t} -> global_env
+  | Ddata {name = id; params = idl; types = ntl} -> global_env
+  | Dclass {name = id; params = idl; defs = defl} -> global_env
+  | Dinstance (i, dl) -> global_env
