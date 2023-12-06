@@ -74,7 +74,7 @@ type decl =
 | Dfdecl of fdecl
 | Ddata of data
 | Dclass of clas
-| Dinstance of instance * (defn list)
+| Dinstance of instance * (defn list) (*C*)
 
 and fdecl = {
   name: ident;

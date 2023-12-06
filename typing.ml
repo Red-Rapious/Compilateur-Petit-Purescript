@@ -124,7 +124,7 @@ let find x global_env =
   in
   subst tx.ttyp
 
-let rec ast_type:Ast.ttyp = function
+let rec ast_type = function
   | Tatype a -> ast_atype a
   | Tntype n -> ast_ntype n
 
@@ -136,7 +136,7 @@ and ast_atype =  function
   | Ttype t -> ast_type t
   | _ -> TBool
 
-and ast_ntype global_env local_env (id, l) =
+and ast_ntype (id, l) =
   let cons_arg = List.map ast_atype l in TCons(cons_arg)
 
 let rec typ_exp global_env local_env loc_expr =
@@ -301,7 +301,7 @@ let rec well_formed_declaration global_env local_env declaration =
        declaration.types
 
 and well_formed_instance global_env local_env = function
-  | Intype n -> true
+  | Intype (n, n1) -> true
   | Iarrow (nl, n) ->
       if List.for_all (fun x -> well_formed_ntype global_env local_env x) nl
       then well_formed_ntype global_env local_env n
@@ -343,30 +343,29 @@ let rec type_defn global_env local_env (id, plist, exp) =
 
 and type_fdecl global_env local_env { name = id; variables = idl; ntypes = nl; types = tl; out_type = t } = 
   if (well_formed_declaration global_env local_env { name = id; variables = idl; ntypes = nl; types = tl; out_type = t }) 
-    then add true TArrow((List.map ast_ntype nl), (ast_type t)) global_env else failwith "La déclaration est mal formée." (*GRRRRRRRRRRRRRRR OCAML BORDEL FAIS TON TYPAGE AUTREMENT QU'AVEC LE CUL CONNARD*)
+    then add true id (TArrow((List.map ast_ntype nl), (ast_type t))) global_env else failwith "La déclaration est mal formée." (*GRRRRRRRRRRRRRRR OCAML BORDEL FAIS TON TYPAGE AUTREMENT QU'AVEC LE CUL CONNARD*)
 
-and type_class global_env local_env { name = id; params = idl; defs = defl } = 
-  let local_env = Hashtbl.create (List.length idl) in
+and type_class global_env local_env { name = id; params = idl; decls = defl } = 
+  let local_env = List.fold_left (fun env x -> add false x TUnit env) local_env idl in
+  if Smaps.cardinal local_env.bindings <> List.length idl then failwith "Il faut changer les noms des variables";
+  List.fold_left (fun env def -> type_fdecl env local_env def) global_env defl
+
+and type_instance global_env local_env (i, dl) = 
   let rec run = function
-    | h :: t ->
-        add false h TUnit local_env;
-        run t
     | [] -> ()
-  in
-  run idl;
-  if Hashtbl.length local_env <> List.length idl then failwith "Il faut changer les noms des variables";
-  let local_env = empty in
+    | h::t -> ()
+  in run dl;
+  global_env
 
-  List.fold_left (fun env def -> type_fdecl env local_env def) global_env
-
+and type_data global_env local_env { name = id; params = idl; types = ntl } = global_env 
 
 let type_decl global_env local_env decl =
   match decl with
   | Defn d -> type_defn global_env local_env d
   | Dfdecl d ->  type_fdecl global_env local_env d
-  | Ddata { name = id; params = idl; types = ntl } -> global_env (*This is pas parsé correctly*)
-  | Dclass d -> global_env 
-  | Dinstance (i, dl) -> global_env
+  | Ddata d -> global_env (*This is pas parsé correctly*)
+  | Dclass d -> type_class global_env empty d 
+  | Dinstance (i, dl) -> type_instance global_env empty (i, dl)
 
 
 let fonctionstypesettrucstraditionnelsalanoix = []
