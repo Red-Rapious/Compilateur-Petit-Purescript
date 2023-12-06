@@ -123,7 +123,7 @@ tdecl:
   }
 ;
 
-defn: name = lident args = list(patarg) SIMPLE_EQ e = loc_expr 
+defn: name = lident args = list(loc_patarg) SIMPLE_EQ e = loc_expr 
   { (name, args, e) }
 ;
 
@@ -158,7 +158,7 @@ patarg:
 
 pattern:
 | p = loc_patarg                        { Parg p }
-| id = uident l = nonempty_list(patarg) { Pnamedarg (id, l) }
+| id = uident l = nonempty_list(loc_patarg) { Pnamedarg (id, l) }
 
 loc_atom: a=atom { ($loc, a) };
 atom:

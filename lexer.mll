@@ -64,7 +64,7 @@ rule token = parse
   | "->"                  { SIMPLE_ARROW }
   | "=>"                  { DOUBLE_ARROW }
   | "::"                  { DOUBLE_POINTS }
-  | ";"                   { SEMICOLON }
+  (*| ";"                   { SEMICOLON }*)
   | "|"                   { VBAR }
   | "."                   { POINT }
   | ","                   { COMMA }
