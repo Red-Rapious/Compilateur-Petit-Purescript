@@ -41,7 +41,7 @@ let rec canon t =
   | TVar { id = a; def = None } as t -> t
   | TVar { id = a; def = Some t } -> TVar { id = a; def = Some (canon t) }
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
-  | TCons t -> TCons(List.map canon t)
+  | TCons t -> TCons (List.map canon t)
 
 exception UnificationFailure of ttyp * ttyp
 
@@ -84,7 +84,7 @@ let rec fvars t =
   | TEffect t -> fvars t
   | TArrow (t1, t2) -> List.fold_left Vset.union (fvars t2) (List.map fvars t1)
   | TVar v -> Vset.singleton v
-  | TCons t -> List.fold_left Vset.union (Vset.empty) (List.map fvars t)
+  | TCons t -> List.fold_left Vset.union Vset.empty (List.map fvars t)
 
 let norm_varset s =
   Vset.fold (fun v s -> Vset.union (fvars (TVar v)) s) s Vset.empty
@@ -120,27 +120,24 @@ let find x global_env =
     | (TInt | TBool | TStr | TUnit) as t -> t
     | TEffect t -> TEffect (subst t)
     | TArrow (t1, t2) -> TArrow (List.map subst t1, subst t2)
-    | TCons t -> TCons(List.map subst t)
+    | TCons t -> TCons (List.map subst t)
   in
   subst tx.ttyp
 
-  
-let rec ast_type global_env local_env = function
-  | Tatype a -> ast_atype global_env local_env a
-  | Tntype n -> ast_ntype global_env local_env n
+let rec ast_type:Ast.ttyp = function
+  | Tatype a -> ast_atype a
+  | Tntype n -> ast_ntype n
 
-and ast_atype global_env local_env = function
+and ast_atype =  function
   | Tident "String" -> TStr
   | Tident "Int" -> TInt
   | Tident "Boolean" -> TBool
   | Tident "Unit" -> TUnit
-  | Ttype t -> ast_type global_env local_env t
+  | Ttype t -> ast_type t
   | _ -> TBool
 
 and ast_ntype global_env local_env (id, l) =
-  let cons_arg = List.map (ast_atype global_env local_env) l in
-  TCons(cons_arg)
-
+  let cons_arg = List.map ast_atype l in TCons(cons_arg)
 
 let rec typ_exp global_env local_env loc_expr =
   let loc, expr = loc_expr in
@@ -233,9 +230,16 @@ let rec typ_exp global_env local_env loc_expr =
       tret
   | Elet (bl, e) ->
       typ_exp
-        (List.fold_left (fun global_env x -> typ_binding global_env local_env x) global_env bl)
+        (List.fold_left
+           (fun global_env x -> typ_binding global_env local_env x)
+           global_env bl)
         local_env e
-  | Efunc(id, al) -> let t1 = find id global_env in let t2 = List.map (fun x -> typ_atom global_env local_env x) al in let v = TVar(V.create()) in unify t1 (TArrow(t2, v)); v
+  | Efunc (id, al) ->
+      let t1 = find id global_env in
+      let t2 = List.map (fun x -> typ_atom global_env local_env x) al in
+      let v = TVar (V.create ()) in
+      unify t1 (TArrow (t2, v));
+      v
 
 and typ_atom global_env local_env (l, a) =
   match a with
@@ -245,7 +249,7 @@ and typ_atom global_env local_env (l, a) =
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
   | Aexpr e -> typ_exp global_env local_env e
   | Atypedexpr (e, tau) ->
-      let t = ast_type global_env local_env tau in
+      let t = ast_type tau in
       if typ_eq t (typ_exp global_env local_env e) then t
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
@@ -280,9 +284,6 @@ and typ_branch global_env local_env (p, e) =
          years being the good guy, you know the man in the white fucking hat, \
          for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
-
-
-
 let rec well_formed_declaration global_env local_env declaration =
   let table = Hashtbl.create (List.length declaration.variables) in
   let rec run = function
@@ -295,13 +296,15 @@ let rec well_formed_declaration global_env local_env declaration =
   List.for_all
     (fun i -> well_formed_instance global_env local_env (Intype i))
     declaration.ntypes
-  && List.for_all (fun i -> well_formed_typ global_env local_env i) declaration.types
+  && List.for_all
+       (fun i -> well_formed_typ global_env local_env i)
+       declaration.types
 
 and well_formed_instance global_env local_env = function
   | Intype n -> true
   | Iarrow (nl, n) ->
-      if List.for_all (fun x -> well_formed_ntype global_env local_env x) nl then
-        well_formed_ntype global_env local_env n
+      if List.for_all (fun x -> well_formed_ntype global_env local_env x) nl
+      then well_formed_ntype global_env local_env n
       else false
 
 and well_formed_typ global_env local_env t =
@@ -312,42 +315,69 @@ and well_formed_typ global_env local_env t =
 and well_formed_atype global_env local_env = function
   | Tident id -> (
       try
-        let _ = find id local_env in true
-      with
-      | Not_found -> failwith "Type non défini")
+        let _ = find id local_env in
+        true
+      with Not_found -> failwith "Type non défini")
   | Ttype t -> well_formed_typ global_env local_env t
 
 and well_formed_ntype global_env local_env (id, al) =
-  try (
-    let l = find id global_env in (*On vérifie que le constructeur étudié est bien défini*)
+  try
+    let l = find id global_env in
+    (*On vérifie que le constructeur étudié est bien défini*)
     match l with
-    | TCons(nl) -> (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
-    List.length nl == List.length al
-    && List.for_all (fun x -> well_formed_atype global_env local_env x) al
-    | _ -> failwith "Ceci n'est pas un constructeur")
+    | TCons nl ->
+        (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
+        List.length nl == List.length al
+        && List.for_all (fun x -> well_formed_atype global_env local_env x) al
+    | _ -> failwith "Ceci n'est pas un constructeur"
   with Not_found -> failwith "Type non défini"
 
-
-
-
-
-
-
-
-
-
-
-(* Algorithme : 
-  - On parcourt les déclarations du programme dans l'ordre.
-  - On initialise l'environnement global de typage avec les déclarations prédéfinies.
-  - On ajoute les types des déclarations dans l'environnement global de typage.
-  - A chaque fois qu'on doit vérifier un jugement bien formé, on crée un environnement local spécifique. 
+(* Algorithme :
+   - On parcourt les déclarations du programme dans l'ordre.
+   - On initialise l'environnement global de typage avec les déclarations prédéfinies.
+   - On ajoute les types des déclarations dans l'environnement global de typage.
+   - A chaque fois qu'on doit vérifier un jugement bien formé, on crée un environnement local spécifique.
 *)
+let rec type_defn global_env local_env (id, plist, exp) = 
+  add false id (typ_exp global_env empty exp) global_env
 
-let type_decl global_env decl =
+and type_fdecl global_env local_env { name = id; variables = idl; ntypes = nl; types = tl; out_type = t } = 
+  if (well_formed_declaration global_env local_env { name = id; variables = idl; ntypes = nl; types = tl; out_type = t }) 
+    then add true TArrow((List.map ast_ntype nl), (ast_type t)) global_env else failwith "La déclaration est mal formée." (*GRRRRRRRRRRRRRRR OCAML BORDEL FAIS TON TYPAGE AUTREMENT QU'AVEC LE CUL CONNARD*)
+
+and type_class global_env local_env { name = id; params = idl; defs = defl } = 
+  let local_env = Hashtbl.create (List.length idl) in
+  let rec run = function
+    | h :: t ->
+        add false h TUnit local_env;
+        run t
+    | [] -> ()
+  in
+  run idl;
+  if Hashtbl.length local_env <> List.length idl then failwith "Il faut changer les noms des variables";
+  let local_env = empty in
+
+  List.fold_left (fun env def -> type_fdecl env local_env def) global_env
+
+
+let type_decl global_env local_env decl =
   match decl with
-  | Defn ((id, plist, exp)) -> add false id (typ_exp global_env empty exp) global_env 
-  | Dfdecl {name = id; variables = idl; ntypes = nl; types = tl; out_type = t} -> global_env
-  | Ddata {name = id; params = idl; types = ntl} -> global_env
-  | Dclass {name = id; params = idl; defs = defl} -> global_env
+  | Defn d -> type_defn global_env local_env d
+  | Dfdecl d ->  type_fdecl global_env local_env d
+  | Ddata { name = id; params = idl; types = ntl } -> global_env (*This is pas parsé correctly*)
+  | Dclass d -> global_env 
   | Dinstance (i, dl) -> global_env
+
+
+let fonctionstypesettrucstraditionnelsalanoix = []
+
+let base_env = 
+  let e = empty in
+  List.fold_left (fun env x -> add false (fst x) (snd x) e) e fonctionstypesettrucstraditionnelsalanoix
+
+
+let type_file file =
+  let env = base_env in
+  List.fold_left (fun env x -> type_decl env empty x) env file
+
+

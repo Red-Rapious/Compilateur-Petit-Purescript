@@ -3,4 +3,4 @@ import Prelude
 import Effect
 import Effect.Console
 
-main = 42
+main = "bonjour" <> " au revoir"

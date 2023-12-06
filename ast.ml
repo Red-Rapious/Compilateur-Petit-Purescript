@@ -93,7 +93,7 @@ and data = {
 and clas = { 
   name: ident; 
   params: ident list; 
-  defs: defn list 
+  defs: fdecl list (* TODO : This should be fdecl list*) 
 }
 
 type file = { main : decl list }
