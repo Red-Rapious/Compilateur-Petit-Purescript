@@ -74,39 +74,43 @@ let () =
     failwith "La production de code n'est pas implémentée pour l'instant"
     (*Interp.prog p*)
   with
-    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    (* Erreur lexicale *)
     | Lexer.Lexing_error c ->
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale : %s@." c;
       exit 1
 
-    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
-    | Indenter.IndentationError c ->
+    (* Erreur d'indentation *)
+    | Indenter.IndentationError c -> 
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur d'indentation : %s@." c;
       exit 1
     
-    (* Erreur syntaxique. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    (* Erreur syntaxique *)
     | Parser.Error ->
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur syntaxique@.";
       exit 1
 
+    (* Erreur classique de typage *)
     | Typing.Typing_error (l, s) ->
       double_localisation l ;
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
+    (* Pattern matching vide *)
     | Typing.Empty_pattern_matching l ->
       double_localisation l ;
       eprintf "Pattern matching vide." ;
       exit 1
 
+    (* Identifiant inconnu *)
     | Typing.Unknown_ident (l, id) ->
       double_localisation l ;
       eprintf "Identifiant inconnu : %s@." id ;
       exit 1
 
+    (* Erreur de OCaml (ou failwith) *)
     | e ->
       eprintf "Erreur interne du compilateur : %s\n@." (Printexc.to_string e);
       exit 2
