@@ -61,14 +61,15 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let p = Parser.file (Indenter.indent true) buf  in
+    let program = Parser.file (Indenter.indent true) buf  in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    ignore (Typing.type_file p.main);
-
+    ignore (Typing.type_file program.main);
+    if program.module_name <> "Main" then
+      eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
     failwith "La production de code n'est pas implémentée pour l'instant"
     (*Interp.prog p*)

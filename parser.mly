@@ -13,7 +13,7 @@
 %token <Ast.binop> CMP
 %token <Ast.ident> LIDENT
 %token <Ast.ident> UIDENT
-%token MODULE_MAIN
+%token MODULE
 %token IMPORTS
 %token LPAREN RPAREN
 %token PLUS MINUS TIMES DIV
@@ -53,8 +53,12 @@ uident: id = UIDENT { id };
 
 /* Règles de grammaire */
 file:
-  MODULE_MAIN WHERE LBRACK i=imports SEMICOLON d=separated_nonempty_list(SEMICOLON, decl) RBRACK EOF
-    { { main = d } }
+  MODULE module_name=uident WHERE LBRACK 
+    i=imports SEMICOLON 
+    d=separated_nonempty_list(SEMICOLON, decl) 
+  RBRACK 
+  EOF
+    { { module_name ; main = d } }
 ;
 
 imports: IMPORTS {};

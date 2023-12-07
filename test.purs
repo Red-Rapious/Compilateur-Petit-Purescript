@@ -1,4 +1,4 @@
-module Main where
+module Troll where
 import Prelude
 import Effect
 import Effect.Console
