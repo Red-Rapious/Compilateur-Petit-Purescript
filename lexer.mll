@@ -25,7 +25,7 @@
         "in", IN;
         "instance", INSTANCE;
         "let", LET;
-        (*"module", MODULE;*)
+        "module", MODULE;
         "of", OF;
         "then", THEN;
         "true", CST (Cbool true);
@@ -64,12 +64,10 @@ rule token = parse
   | "->"                  { SIMPLE_ARROW }
   | "=>"                  { DOUBLE_ARROW }
   | "::"                  { DOUBLE_POINTS }
-  (*| ";"                   { SEMICOLON }*)
   | "|"                   { VBAR }
   | "."                   { POINT }
   | ","                   { COMMA }
   | integer as i          { CST (Cint (int_of_string i))}
-  | "module Main"         { MODULE_MAIN }
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
                           { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
   | lident as i           { id_or_kwd i }

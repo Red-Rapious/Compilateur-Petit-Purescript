@@ -96,7 +96,7 @@ and clas = {
   decls: fdecl list
 }
 
-type file = { main : decl list }
+type file = { module_name: string ; main : decl list }
 
 type ttyp =
   | TUnit

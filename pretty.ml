@@ -19,7 +19,7 @@ match b with
 | Bconcat -> "<>"
 
 let print_token t = match t with
-| MODULE_MAIN -> "module Main where\n"
+| MODULE -> "module "
 | IMPORTS -> "imports\n"
 | LPAREN -> "("
 | RPAREN -> ")"

@@ -3,5 +3,4 @@ import Prelude
 import Effect
 import Effect.Console
 
-main = 24
-main = 36
+main = "test" <> 1234561234567823

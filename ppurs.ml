@@ -19,14 +19,22 @@ let options =
 
 let usage = "usage: ppurs [options] file.purs"
 
-(* localise une erreur en indiquant la ligne et la colonne *)
+(* Localise une erreur à une seule position en indiquant la ligne et la colonne *)
 let localisation pos =
   let l = pos.pos_lnum in
   let c = pos.pos_cnum - pos.pos_bol + 1 in
   eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l (c-1) c
 
-(* TODO: utiliser les deux localisations pour préciser plus spécifiquement *)
-let type_localisation l = localisation (fst l) 
+(* Localise une erreur à deux positions en indiquant la/les lignes et les caractères concernés*)
+let double_localisation (pstart, pend) = 
+  let l1 = pstart.pos_lnum 
+  and l2 = pend.pos_lnum in
+  let cstart = pstart.pos_cnum - pend.pos_bol 
+  and cend = pend.pos_cnum - pend.pos_bol in
+  if l1 = l2 then
+    eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l1 cstart cend
+  else 
+    eprintf "File \"%s\", line %d-%d, characters %d-%d:\n" !ifile l1 l2 cstart cend
 
 let () =
   (* Parsing de la ligne de commande *)
@@ -53,51 +61,56 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let p = Parser.file (Indenter.indent true) buf  in
+    let program = Parser.file (Indenter.indent true) buf  in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    ignore (Typing.type_file p.main);
-
+    ignore (Typing.type_file program.main);
+    if program.module_name <> "Main" then
+      eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
     failwith "La production de code n'est pas implémentée pour l'instant"
     (*Interp.prog p*)
   with
-    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    (* Erreur lexicale *)
     | Lexer.Lexing_error c ->
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur lexicale : %s@." c;
       exit 1
 
-    (* Erreur lexicale. On récupère sa position absolue et on la convertit en numéro de ligne *)
-    | Indenter.IndentationError c ->
+    (* Erreur d'indentation *)
+    | Indenter.IndentationError c -> 
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur d'indentation : %s@." c;
       exit 1
     
-    (* Erreur syntaxique. On récupère sa position absolue et on la convertit en numéro de ligne *)
+    (* Erreur syntaxique *)
     | Parser.Error ->
       localisation (Lexing.lexeme_start_p buf);
       eprintf "Erreur syntaxique@.";
       exit 1
 
+    (* Erreur classique de typage *)
     | Typing.Typing_error (l, s) ->
-      type_localisation l ;
+      double_localisation l ;
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
+    (* Pattern matching vide *)
     | Typing.Empty_pattern_matching l ->
-      type_localisation l ;
+      double_localisation l ;
       eprintf "Pattern matching vide." ;
       exit 1
 
+    (* Identifiant inconnu *)
     | Typing.Unknown_ident (l, id) ->
-      type_localisation l ;
+      double_localisation l ;
       eprintf "Identifiant inconnu : %s@." id ;
       exit 1
 
+    (* Erreur de OCaml (ou failwith) *)
     | e ->
       eprintf "Erreur interne du compilateur : %s\n@." (Printexc.to_string e);
       exit 2
