@@ -25,9 +25,8 @@ let localisation pos =
   let c = pos.pos_cnum - pos.pos_bol + 1 in
   eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l (c-1) c
 
+(* TODO: utiliser les deux localisations pour préciser plus spécifiquement *)
 let type_localisation l = localisation (fst l) 
-
-let big_localisation pos = failwith "todo"
 
 let () =
   (* Parsing de la ligne de commande *)

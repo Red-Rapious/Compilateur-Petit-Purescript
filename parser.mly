@@ -88,38 +88,7 @@ decl:
 | INSTANCE inst=instance WHERE LBRACK 
     l=separated_list(SEMICOLON, defn) 
   RBRACK { Dinstance (inst, l) }
-
 ;
-
-(* TODO: utiliser une seule fonction à la main *)
-(*ntype_arrow_list:
-| n=ntype DOUBLE_ARROW { [n] }
-| n=ntype DOUBLE_ARROW l=ntype_arrow_list { n::l }
-;
-
-type_arrow_list:
-| t=typ SIMPLE_ARROW { [t] }
-| t=typ SIMPLE_ARROW l=type_arrow_list { t::l }
-;
-
-tdecl_end:
-  ntypes=option(ntype_arrow_list) types=option(type_arrow_list) (* ICI RÉSIDE LE PROBLÈME *)
-  out_type=typ {
-    let ntypes = match ntypes with
-    | None -> []
-    | Some x -> x
-    and types = match types with
-    | None -> []
-    | Some x -> x
-    in
-    {
-      name="";
-      variables=[];
-      ntypes;
-      types;
-      out_type
-    }
-  }*)
 
 tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
 type_list:
