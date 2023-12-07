@@ -55,22 +55,6 @@ let rec occur v t =
   | TArrow (t1, t2) -> List.exists (fun e -> occur v e) t1 || occur v t2
   | _ -> false
 
-let rec unify t1 t2 =
-  match (head t1, head t2) with
-  | TVar v1, TVar v2 when V.equal v1 v2 -> ()
-  | (TVar v1 as t1), t2 ->
-      if occur v1 t2 then unification_error t1 t2;
-      assert (v1.def = None);
-      v1.def <- Some t2
-  | t1, TVar v2 -> unify t2 t1
-  | TArrow (t11, t12), TArrow (t21, t22) ->
-      List.iter2 unify t11 t21;
-      unify t12 t22
-  | TCons (s1, t1), TCons (s2, t2) when s1 = s2 -> List.iter2 unify t1 t2
-  | TInt, TInt | TBool, TBool | TStr, TStr | TUnit, TUnit -> ()
-  | TAlias t1, TAlias t2 when t1 = t2 -> ()
-  | t1, t2 -> unification_error t1 t2
-
 module Vset = Set.Make (V)
 
 let rec fvars t =
@@ -97,6 +81,27 @@ type constr = {
   ctyp : ttyp;
   cenvvartyps : (ttyp * int) Smaps.t;
 }
+
+let rec unify tl1 tl2 =
+  let assoc = ref Smaps.empty in
+  let rec aux tl1 tl2 =
+    match (tl1, tl2) with
+    | [], [] -> true
+    | TUnit :: t1, TUnit :: t2
+    | TInt :: t1, TInt :: t2
+    | TStr :: t1, TStr :: t2
+    | TBool :: t1, TBool :: t2 ->
+        aux t1 t2
+    | TCons (s, _) :: t1, TCons (t, _) :: t2 when t = s -> aux t1 t2
+    | TAlias s :: t1, t :: t2 ->
+        if Smaps.mem s !assoc then aux (Smaps.find s !assoc :: t1) (t :: t2)
+        else (
+          assoc := Smaps.add s t !assoc;
+          aux t1 t2)
+    | t :: t1, TAlias s :: t2 -> aux tl2 tl1
+    | _ -> false
+  in
+  aux tl1 tl2
 
 let add global x t global_env =
   let vt = fvars t in
@@ -186,7 +191,7 @@ let class_env =
          [] )
        Smaps.empty)
 
-let rec typ_exp global_env type_env instance_env loc_expr =
+let rec typ_exp global_env type_env (instance_env:(typ list * (ident * typ list) list) list Smaps.t) global loc_expr =
   let loc, expr = loc_expr in
   match expr with
   | Eunop (_, e) -> (
@@ -257,23 +262,25 @@ let rec typ_exp global_env type_env instance_env loc_expr =
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
-  | Eatom a -> typ_atom global_env type_env instance_env a
+  | Eatom a -> typ_atom global_env type_env instance_env global a
   | Edo l ->
       List.iter
         (fun e ->
           if
             not
               (typ_eq
-                 (typ_exp global_env type_env instance_env e)
+                 (typ_exp global_env type_env instance_env global e)
                  (TCons ("Effect", [ TUnit ])))
           then typing_error (fst e) "le type attendu est Effect Unit")
         l;
       TCons ("Effect", [ TUnit ])
   | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
   | Ecase (e, l) ->
-      let t = typ_exp global_env type_env instance_env e in
+      let t = typ_exp global_env type_env instance_env global e in
       let rettypes =
-        List.map (fun x -> typ_branch global_env type_env instance_env x) l
+        List.map
+          (fun x -> typ_branch global_env type_env instance_env global x)
+          l
       in
       let tret = snd (List.hd rettypes) in
       (* TODO: préciser encore plus quelle branche est mal typée *)
@@ -288,9 +295,10 @@ let rec typ_exp global_env type_env instance_env loc_expr =
   | Elet (bl, e) ->
       typ_exp
         (List.fold_left
-           (fun global_env x -> typ_binding global_env type_env instance_env x)
+           (fun global_env x ->
+             typ_binding global_env type_env instance_env global x)
            global_env bl)
-        type_env instance_env e
+        type_env instance_env global e
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
@@ -298,8 +306,8 @@ let rec typ_exp global_env type_env instance_env loc_expr =
           match (al, tl) with
           | [], [] -> ()
           | h1 :: t1, h2 :: t2 ->
-              if typ_eq (typ_atom global_env type_env instance_env h1) h2 then
-                aux t1 t2
+              if typ_eq (typ_atom global_env type_env instance_env global h1) h2
+              then aux t1 t2
               else failwith "Mauvais Types dans le constructeur"
                 (*TODO : AJouter localisation*)
           | _ -> failwith "Liste d'argument d'une longueur insuffisante"
@@ -315,47 +323,118 @@ let rec typ_exp global_env type_env instance_env loc_expr =
               (frth (Smaps.find id !function_env))
           in
           if Smaps.mem id global_env.bindings then failwith "Pas une fonction"
-          else
-            match thrd (Smaps.find id !function_env) with
+          else(
+            (match thrd (Smaps.find id !function_env) with
             | None -> TBool
             | Some cident ->
                 let instances = Smaps.find cident instance_env in
-                compat_instances instance_env cident id instances []
+                compat_instances instance_env cident id instances (List.map (typ_atom global_env type_env instance_env global) al));
+          
+                let tlist, t = 
+              match frst (smaps_find id !function_env) with
+                | TArrow(tlist, t) -> tlist, t
+                | _ -> failwith "Ma qué pasta"
+                
+            in
+            let vars = ref Smaps.empty in
+            let rec aux tlist alist = 
+              match (tlist, alist) with
+              | [], [] -> ()
+              | t::q1, a::q2 -> (
+                match t with 
+                | TAlias s -> (
+                  let tau = typ_atom global_env type_env instance_env global a in
+                  match tau with
+                  | TAlias _ -> pattern
+                )
+
+              ) 
+            
+            )
         with Not_found -> failwith "Fonction Non Définie")
 
-and compat_instances instance_env cident id instances tlist = TBool
+and compat_instances instance_env cident id instances tlist global =
+  let slist, class_functions, functions = smaps_find cident !class_env in
+  let ftlist =
+    match smaps_find id class_functions with
+    | TArrow (tl, t) -> tl
+    | _ -> failwith "Ma qué pasta ?"
+  in
+  let rec consmap env tl1 tl2 =
+    match (tl1, tl2) with
+    | [], [] -> env
+    | TAlias s :: t1, h :: t2 -> Smaps.add s h (consmap env t1 t2)
+    | t1 :: q1, t2 :: q2 when typ_eq t1 t2 -> consmap env q1 q2
+    | _ -> failwith "Appel incompatible avec sa définition"
+  in
+  let env = consmap Smaps.empty ftlist tlist in
+  let variables = List.map (fun s -> smaps_find s env) slist in
+  let rec valid tl1 tl2 =
+    match (tl1, tl2) with
+    | h1 :: t1, h2 :: t2 when h1 = h2 -> valid t1 t2
+    | [], [] -> true
+    | _ -> false
+  in
+  let rec basic_instinct instance_env tlist = function
+    | [] -> false
+    | h :: t ->
+        (((not global) && valid h tlist) || (global && unify h tlist))
+        || basic_instinct instance_env tlist t
+  in
+  let rec all_basic_instinct instance_env = function
+    | [] -> true
+    | (s, tlist) :: q ->
+        basic_instinct instance_env tlist
+          (List.map fst (smaps_find s instance_env))
+        && all_basic_instinct instance_env q
+  in
+  let rec find_valid tlist = function
+    | [] ->
+        failwith
+          ("Pas d'instance compatible pour la classe " ^ cident
+         ^ " en appelant " ^ f)
+    | tl :: q
+      when (((not global) && valid (fst tl) tlist)
+           || (global && unify (fst tl) tlist))
+           && all_basic_instinct instance_env (snd tl) ->
+        ()
+    | tl :: q -> find_valid tlist q
+  in
+  find_valid tlist instances
 
-and typ_atom global_env type_env instance_env (l, a) =
+and typ_atom global_env type_env instance_env global (l, a) =
   match a with
   | Aconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
-  | Aident id -> (
+  | Aident id when is_lower id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Aexpr e -> typ_exp global_env type_env instance_env e
+  | Aident id -> (smaps_find id !cons_env).ctyp
+  | Aexpr e -> typ_exp global_env type_env instance_env global e
   | Atypedexpr (e, tau) ->
       let t = ast_type tau in
-      if typ_eq t (typ_exp global_env type_env instance_env e) then t
+      if typ_eq t (typ_exp global_env type_env instance_env global e) then t
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
-and typ_pattern global_env type_env instance_env = function
-  | Parg (l, p) -> typ_patarg global_env type_env instance_env (l, p)
+and typ_pattern global_env type_env instance_env global = function
+  | Parg (l, p) -> typ_patarg global_env type_env instance_env global (l, p)
   | Pconsarg (id, l) -> TBool (*Pas codé encore*)
 
-and typ_patarg global_env type_env instance_env (l, p) =
+and typ_patarg global_env type_env instance_env global (l, p) =
   match p with
   | Pconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Pident id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Ppattern p -> typ_pattern global_env type_env instance_env p
+  | Ppattern p -> typ_pattern global_env type_env instance_env global p
 
 and typ_binding global_env type_env instance_env = function
-  | id, e -> add true id (typ_exp global_env type_env instance_env e) global_env
+  | id, e ->
+      add true id (typ_exp global_env type_env instance_env global e) global_env
 
-and typ_branch global_env type_env instance_env (p, e) =
-  ( typ_pattern global_env type_env instance_env p,
-    typ_exp global_env type_env instance_env e )
+and typ_branch global_env type_env instance_env global (p, e) =
+  ( typ_pattern global_env type_env instance_env global p,
+    typ_exp global_env type_env instance_env global e )
 (*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
   | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
   | _ ->
@@ -413,7 +492,7 @@ and well_formed_atype global_env type_env instance_env local_env = function
 
 and well_formed_ntype global_env type_env instance_env local_env (id, al) =
   try
-    let l = find id in
+    let l = find id global_env in
     (*On vérifie que le constructeur étudié est bien défini*)
     match l with
     | TCons (s, nl) ->
