@@ -12,6 +12,7 @@ let rec typ_eq t1 t2 =
       | None, None -> true
       | Some t1, Some t2 -> typ_eq t1 t2
       | _, _ -> false)
+  | TAlias t1, TAlias t2 -> t1 = t2
   | _, _ -> false
 
 module V = struct
@@ -31,7 +32,7 @@ let rec head = function TVar { def = Some t } -> head t | t -> t
 
 let rec canon t =
   match head t with
-  | (TInt | TBool | TStr | TUnit) as t -> t
+  | (TInt | TBool | TStr | TUnit | TAlias _) as t -> t
   | TVar { id = a; def = None } as t -> t
   | TVar { id = a; def = Some t } -> TVar { id = a; def = Some (canon t) }
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
@@ -67,13 +68,14 @@ let rec unify t1 t2 =
       unify t12 t22
   | TCons (s1, t1), TCons (s2, t2) when s1 = s2 -> List.iter2 unify t1 t2
   | TInt, TInt | TBool, TBool | TStr, TStr | TUnit, TUnit -> ()
+  | TAlias t1, TAlias t2 when t1 = t2 -> ()
   | t1, t2 -> unification_error t1 t2
 
 module Vset = Set.Make (V)
 
 let rec fvars t =
   match head t with
-  | TInt | TStr | TBool | TUnit -> Vset.empty
+  | TInt | TStr | TBool | TUnit | TAlias _ -> Vset.empty
   | TArrow (t1, t2) -> List.fold_left Vset.union (fvars t2) (List.map fvars t1)
   | TVar v -> Vset.singleton v
   | TCons (_, t) -> List.fold_left Vset.union Vset.empty (List.map fvars t)
@@ -96,10 +98,10 @@ type constr = {
   cenvvartyps : (ttyp * int) Smaps.t;
 }
 
-let add gen x t global_env =
+let add global x t global_env =
   let vt = fvars t in
   let s, fvars =
-    if gen then
+    if global then
       let env_fvars = norm_varset global_env.fvars in
       ({ vars = Vset.diff vt env_fvars; ttyp = t }, global_env.fvars)
     else ({ vars = Vset.empty; ttyp = t }, Vset.union global_env.fvars vt)
@@ -116,28 +118,25 @@ let find x global_env =
   let rec subst t =
     match head t with
     | TVar x as t -> ( try Vmap.find x s with Not_found -> t)
-    | (TInt | TBool | TStr | TUnit) as t -> t
+    | (TInt | TBool | TStr | TUnit | TAlias _) as t -> t
     | TArrow (t1, t2) -> TArrow (List.map subst t1, subst t2)
     | TCons (s, t) -> TCons (s, List.map subst t)
   in
   subst tx.ttyp
-
-let mem x env = Smaps.mem x env.bindings
-let const_env = ref Smaps.empty
 
 let rec no_same_name = function
   | [] -> true
   | h :: t -> (not (List.mem h t)) && no_same_name t
 
 let string_to_list s = List.init (String.length s) (String.get s)
-let isalident s = List.mem s.[0] (string_to_list "azertyuiopqsdfghjklmwxcvbn")
+let is_lower s = List.mem s.[0] (string_to_list "abcdefghijklmnopqrstuvwxyz")
 
 let rec ast_type = function Tatype a -> ast_atype a | Tntype n -> ast_ntype n
 
 and ast_atype = function
   | Tident "String" -> TStr
-  | Tident "Int" -> TInt
-  | Tident "Boolean" -> TBool
+  | Tident "TInt" -> TTInt
+  | Tident "TBool" -> TBool
   | Tident "Unit" -> TUnit
   | Ttype t -> ast_type t
   | _ -> TBool
@@ -146,34 +145,62 @@ and ast_ntype (id, l) =
   let cons_arg = List.map ast_atype l in
   TCons (id, cons_arg)
 
-let rec typ_exp global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env loc_expr =
+let frst (a, b, c, d) = a
+let scnd (a, b, c, d) = b
+let thrd (a, b, c, d) = c
+let frth (a, b, c, d) = d
+
+let smaps_find id env =
+  try Smaps.find id env with Not_found -> failwith "Identificateur Indéfini"
+
+let function_env =
+  ref
+    ( List.fold_left2
+        (fun env x t -> Smaps.add x t env)
+        Smaps.empty
+        [ "not"; "mod"; "log"; "pure"; "show" ],
+      [
+        (TArrow ([ TBool ], TBool), Smaps.empty, None, Smaps.empty);
+        (TArrow ([ TInt; TInt ], TInt), Smaps.empty, None, Smaps.empty);
+        ( TArrow ([ TStr ], TCons ("Effect", [ TUnit ])),
+          Smaps.empty,
+          None,
+          Smaps.empty );
+        ( TArrow ([ TAlias "a" ], TCons ("Effect", [ TAlias "a" ])),
+          Smaps.add "a" (TAlias "a", 0) Smaps.empty,
+          None,
+          Smaps.empty );
+        ( TArrow ([ TAlias "a" ], TStr),
+          Smaps.add "a" (TAlias "a", 0) Smaps.empty,
+          Some "Show",
+          Smaps.empty );
+      ] )
+
+let cons_env = ref Smaps.empty
+
+let class_env =
+  ref
+    (Smaps.add "Show"
+       ( [ "a" ],
+         Smaps.add "show" (TArrow ([ TAlias "a" ], TStr)) Smaps.empty,
+         [] )
+       Smaps.empty)
+
+let rec typ_exp global_env type_env instance_env loc_expr =
   let loc, expr = loc_expr in
   match expr with
   | Eunop (_, e) -> (
-      match
-        typ_exp global_env type_env instance_env cons_env class_env type_env
-          instance_env cons_env class_env e
-      with
+      match typ_exp global_env type_env instance_env type_env e with
       | TInt -> TInt
       | _ ->
           typing_error (fst e)
             "mauvais opérande pour l'opérateur unaire '-' : le type attendu \
-             est Int")
+             est TInt")
   | Eif (e1, e2, e3) -> (
-      match
-        typ_exp global_env type_env instance_env cons_env class_env type_env
-          instance_env cons_env class_env e1
-      with
+      match typ_exp global_env type_env instance_env e1 with
       | TBool ->
-          let s2 =
-            typ_exp global_env type_env instance_env cons_env class_env type_env
-              instance_env cons_env class_env e2
-          in
-          let s3 =
-            typ_exp global_env type_env instance_env cons_env class_env type_env
-              instance_env cons_env class_env e3
-          in
+          let s2 = typ_exp global_env type_env instance_env e2 in
+          let s3 = typ_exp global_env type_env instance_env e3 in
           if typ_eq s2 s3 then s2
           else
             typing_error (fst e3) "les deux branches doivent être de même type"
@@ -183,12 +210,10 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
              Bool")
   | Ebinop (e1, op, e2) -> (
       let s1 =
-        typ_exp global_env type_env instance_env cons_env class_env type_env
-          instance_env cons_env class_env e1
+        typ_exp global_env type_env instance_env type_env instance_env e1
       in
       let s2 =
-        typ_exp global_env type_env instance_env cons_env class_env type_env
-          instance_env cons_env class_env e2
+        typ_exp global_env type_env instance_env type_env instance_env e2
       in
       let binop_string = Pretty.print_binop op in
       if s1 <> s2 then
@@ -202,7 +227,7 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
-               ^ "' : les expressions comparées doivent être de type Int, \
+               ^ "' : les expressions comparées doivent être de type TInt, \
                   String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
           match s1 with
@@ -210,14 +235,14 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
-               ^ "' : les expressions comparées doivent être de type Int"))
+               ^ "' : les expressions comparées doivent être de type TInt"))
       | Bsub | Badd | Bmul | Bdiv -> (
           match s1 with
           | TInt -> TInt
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
-               ^ "' : les expressions manipulées doivent être de type Int"))
+               ^ "' : les expressions manipulées doivent être de type TInt"))
       | Bconcat -> (
           match s1 with
           | TStr -> TStr
@@ -232,31 +257,23 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
-  | Eatom a -> typ_atom global_env type_env instance_env cons_env class_env t a
+  | Eatom a -> typ_atom global_env type_env instance_env a
   | Edo l ->
       List.iter
         (fun e ->
           if
             not
               (typ_eq
-                 (typ_exp global_env type_env instance_env cons_env class_env
-                    type_env instance_env cons_env class_env e)
+                 (typ_exp global_env type_env instance_env e)
                  (TCons ("Effect", [ TUnit ])))
           then typing_error (fst e) "le type attendu est Effect Unit")
         l;
       TCons ("Effect", [ TUnit ])
   | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
   | Ecase (e, l) ->
-      let t =
-        typ_exp global_env type_env instance_env cons_env class_env type_env
-          instance_env cons_env class_env e
-      in
+      let t = typ_exp global_env type_env instance_env e in
       let rettypes =
-        List.map
-          (fun x ->
-            typ_branch global_env type_env instance_env cons_env class_env
-              type_env instance_env cons_env class_env x)
-          l
+        List.map (fun x -> typ_branch global_env type_env instance_env x) l
       in
       let tret = snd (List.hd rettypes) in
       (* TODO: préciser encore plus quelle branche est mal typée *)
@@ -271,25 +288,18 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
   | Elet (bl, e) ->
       typ_exp
         (List.fold_left
-           (fun global_env x ->
-             typ_binding global_env type_env instance_env cons_env class_env
-               type_env instance_env cons_env class_env x)
+           (fun global_env x -> typ_binding global_env type_env instance_env x)
            global_env bl)
-        type_env instance_env cons_env class_env type_env instance_env cons_env
-        class_env e
-  | Efunc (id, al) ->
-      if not (isalident id) then (
-        let constr = Smaps.find id cons_env in
+        type_env instance_env e
+  | Efunc (id, al) -> (
+      if not (is_lower id) then (
+        let constr = Smaps.find id !cons_env in
         let rec aux al tl =
           match (al, tl) with
           | [], [] -> ()
           | h1 :: t1, h2 :: t2 ->
-              if
-                typ_eq
-                  (typ_atom global_env type_env instance_env cons_env class_env
-                     h1)
-                  h2
-              then aux t1 t2
+              if typ_eq (typ_atom global_env type_env instance_env h1) h2 then
+                aux t1 t2
               else failwith "Mauvais Types dans le constructeur"
                 (*TODO : AJouter localisation*)
           | _ -> failwith "Liste d'argument d'une longueur insuffisante"
@@ -297,68 +307,57 @@ let rec typ_exp global_env type_env instance_env cons_env class_env type_env
         aux al constr.ctlist;
         constr.ctyp)
       else
-        let t1 = find id global_env in
-        let t2 =
-          List.map
-            (fun x ->
-              typ_atom global_env type_env instance_env cons_env class_env
-                type_env instance_env cons_env class_env x)
-            al
-        in
-        let v = TVar (V.create ()) in
-        unify t1 (TArrow (t2, v));
-        v
+        try
+          let instance_env =
+            Smaps.union
+              (fun _ a _ -> Some a)
+              instance_env
+              (frth (Smaps.find id !function_env))
+          in
+          if Smaps.mem id global_env.bindings then failwith "Pas une fonction"
+          else
+            match thrd (Smaps.find id !function_env) with
+            | None -> TBool
+            | Some cident ->
+                let instances = Smaps.find cident instance_env in
+                compat_instances instance_env cident id instances []
+        with Not_found -> failwith "Fonction Non Définie")
 
-and typ_atom global_env type_env instance_env cons_env class_env (l, a) =
+and compat_instances instance_env cident id instances tlist = TBool
+
+and typ_atom global_env type_env instance_env (l, a) =
   match a with
   | Aconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Aident id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Aexpr e -> typ_exp global_env type_env instance_env cons_env class_env e
+  | Aexpr e -> typ_exp global_env type_env instance_env e
   | Atypedexpr (e, tau) ->
       let t = ast_type tau in
-      if
-        typ_eq t
-          (typ_exp global_env type_env instance_env cons_env class_env type_env
-             instance_env cons_env class_env e)
-      then t (* TODO: spécifier les deux types *)
+      if typ_eq t (typ_exp global_env type_env instance_env e) then t
+        (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
-and typ_pattern global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env = function
-  | Parg (l, p) ->
-      typ_patarg global_env type_env instance_env cons_env class_env type_env
-        instance_env cons_env class_env (l, p)
-  | Pconsarg (id, l) -> TBool (*Pas compris encore*)
+and typ_pattern global_env type_env instance_env = function
+  | Parg (l, p) -> typ_patarg global_env type_env instance_env (l, p)
+  | Pconsarg (id, l) -> TBool (*Pas codé encore*)
 
-and typ_patarg global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env (l, p) =
+and typ_patarg global_env type_env instance_env (l, p) =
   match p with
   | Pconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Pident id -> (
       try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Ppattern p ->
-      typ_pattern global_env type_env instance_env cons_env class_env type_env
-        instance_env cons_env class_env p
+  | Ppattern p -> typ_pattern global_env type_env instance_env p
 
-and typ_binding global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env = function
-  | id, e ->
-      add true id
-        (typ_exp global_env type_env instance_env cons_env class_env type_env
-           instance_env cons_env class_env e)
-        global_env
+and typ_binding global_env type_env instance_env = function
+  | id, e -> add true id (typ_exp global_env type_env instance_env e) global_env
 
-and typ_branch global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env (p, e) =
-  ( typ_pattern global_env type_env instance_env cons_env class_env type_env
-      instance_env cons_env class_env p,
-    typ_exp global_env type_env instance_env cons_env class_env type_env
-      instance_env cons_env class_env e )
-(*and typ_branch global_env type_env instance_env cons_env class_env type_env instance_env cons_env class_env (p, e) = function
-  | p, e -> (typ_pattern global_env type_env instance_env cons_env class_env type_env instance_env cons_env class_env p, typ_exp global_env type_env instance_env cons_env class_env type_env instance_env cons_env class_env e)
+and typ_branch global_env type_env instance_env (p, e) =
+  ( typ_pattern global_env type_env instance_env p,
+    typ_exp global_env type_env instance_env e )
+(*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
+  | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
   | _ ->
       (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
       failwith
@@ -370,8 +369,8 @@ and typ_branch global_env type_env instance_env cons_env class_env type_env
          years being the good guy, you know the man in the white fucking hat, \
          for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
-let rec well_formed_declaration global_env type_env instance_env cons_env
-    class_env type_env instance_env cons_env class_env local_env declaration =
+let rec well_formed_declaration global_env type_env instance_env local_env
+    declaration =
   let table = Hashtbl.create (List.length declaration.variables) in
   let rec run = function
     | h :: t ->
@@ -382,55 +381,39 @@ let rec well_formed_declaration global_env type_env instance_env cons_env
   run declaration.variables;
   List.for_all
     (fun i ->
-      well_formed_instance global_env type_env instance_env cons_env class_env
-        type_env instance_env cons_env class_env local_env (Intype i))
+      well_formed_instance global_env type_env instance_env local_env (Intype i))
     declaration.ntypes
   && List.for_all
-       (fun i ->
-         well_formed_typ global_env type_env instance_env cons_env class_env
-           type_env instance_env cons_env class_env local_env i)
+       (fun i -> well_formed_typ global_env type_env instance_env local_env i)
        declaration.types
 
-and well_formed_instance global_env type_env instance_env cons_env class_env
-    type_env instance_env cons_env class_env local_env = function
+and well_formed_instance global_env type_env instance_env local_env = function
   | Intype (n, n1) -> true
   | Iarrow (nl, n) ->
       if
         List.for_all
           (fun x ->
-            well_formed_ntype global_env type_env instance_env cons_env
-              class_env type_env instance_env cons_env class_env local_env x)
+            well_formed_ntype global_env type_env instance_env local_env x)
           nl
-      then
-        well_formed_ntype global_env type_env instance_env cons_env class_env
-          type_env instance_env cons_env class_env local_env n
+      then well_formed_ntype global_env type_env instance_env local_env n
       else false
 
-and well_formed_typ global_env type_env instance_env cons_env class_env type_env
-    instance_env cons_env class_env local_env t =
+and well_formed_typ global_env type_env instance_env local_env t =
   match t with
-  | Tatype a ->
-      well_formed_atype global_env type_env instance_env cons_env class_env
-        type_env instance_env cons_env class_env local_env a
-  | Tntype n ->
-      well_formed_ntype global_env type_env instance_env cons_env class_env
-        type_env instance_env cons_env class_env local_env n
+  | Tatype a -> well_formed_atype global_env type_env instance_env local_env a
+  | Tntype n -> well_formed_ntype global_env type_env instance_env local_env n
 
-and well_formed_atype global_env type_env instance_env cons_env class_env
-    type_env instance_env cons_env class_env local_env = function
+and well_formed_atype global_env type_env instance_env local_env = function
   | Tident id -> (
       try
         let _ = find id local_env in
         true
       with Not_found -> failwith "Type non défini")
-  | Ttype t ->
-      well_formed_typ global_env type_env instance_env cons_env class_env
-        type_env instance_env cons_env class_env local_env t
+  | Ttype t -> well_formed_typ global_env type_env instance_env local_env t
 
-and well_formed_ntype global_env type_env instance_env cons_env class_env
-    type_env instance_env cons_env class_env local_env (id, al) =
+and well_formed_ntype global_env type_env instance_env local_env (id, al) =
   try
-    let l = find id cons_env in
+    let l = find id in
     (*On vérifie que le constructeur étudié est bien défini*)
     match l with
     | TCons (s, nl) ->
@@ -438,8 +421,7 @@ and well_formed_ntype global_env type_env instance_env cons_env class_env
         List.length nl == List.length al
         && List.for_all
              (fun x ->
-               well_formed_atype global_env type_env instance_env cons_env
-                 class_env type_env instance_env cons_env class_env local_env x)
+               well_formed_atype global_env type_env instance_env local_env x)
              al
     | _ -> failwith "Ceci n'est pas un constructeur"
   with Not_found -> failwith "Constructeur non défini"

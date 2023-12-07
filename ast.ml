@@ -106,5 +106,6 @@ type ttyp =
   | TArrow of ttyp list * ttyp
   | TVar of tvar
   | TCons of string * ttyp list
+  | TAlias of string
 
 and tvar = { id : int; mutable def : ttyp option }
