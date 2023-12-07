@@ -135,21 +135,6 @@ let rec no_same_name = function
 
 let string_to_list s = List.init (String.length s) (String.get s)
 let is_lower s = List.mem s.[0] (string_to_list "abcdefghijklmnopqrstuvwxyz")
-
-let rec ast_type = function Tatype a -> ast_atype a | Tntype n -> ast_ntype n
-
-and ast_atype = function
-  | Tident "String" -> TStr
-  | Tident "TInt" -> TTInt
-  | Tident "TBool" -> TBool
-  | Tident "Unit" -> TUnit
-  | Ttype t -> ast_type t
-  | _ -> TBool
-
-and ast_ntype (id, l) =
-  let cons_arg = List.map ast_atype l in
-  TCons (id, cons_arg)
-
 let frst (a, b, c, d) = a
 let scnd (a, b, c, d) = b
 let thrd (a, b, c, d) = c
@@ -190,6 +175,12 @@ let class_env =
          Smaps.add "show" (TArrow ([ TAlias "a" ], TStr)) Smaps.empty,
          [] )
        Smaps.empty)
+
+let rec substitute set t =
+  match head t with
+  | TAlias s -> smaps_find s set
+  | TCons (s, tlist) -> TCons (s, List.map (substitute set) tlist)
+  | _ as t -> t
 
 let rec typ_exp global_env type_env
     (instance_env : (typ list * (ident * typ list) list) list Smaps.t) global
@@ -275,12 +266,13 @@ let rec typ_exp global_env type_env
   | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
   | Ecase (e, l) -> TUnit (*A Coder*)
   | Elet (bl, e) ->
-      typ_exp
-        (List.fold_left
-           (fun global_env x ->
-             typ_binding global_env type_env instance_env global x)
-           global_env bl)
-        type_env instance_env global e
+      let rec aux global_env type_env instance_env l = 
+        match l with 
+        | b :: t -> let tau = typ_exp global_env type_env instance_env global (snd b) in
+        aux (add true (fst b) tau global_env) type_env instance_env t
+        | [] -> global_env
+      in 
+      typ_exp (aux global_env type_env instance_env bl) type_env instance_env global e
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
@@ -312,8 +304,10 @@ let rec typ_exp global_env type_env
                 let instances = Smaps.find cident instance_env in
                 compat_instances instance_env cident id instances
                   (List.map
-                     (fun a -> typ_atom global_env type_env instance_env global a)
-                     al) global) ;
+                     (fun a ->
+                       typ_atom global_env type_env instance_env global a)
+                     al)
+                  global);
             let tlist, t =
               match frst (smaps_find id !function_env) with
               | TArrow (tlist, t) -> (tlist, t)
@@ -349,7 +343,7 @@ let rec typ_exp global_env type_env
               | _ -> failwith "Trop d'arguments"
             in
             aux tlist al;
-            sub !vars t)
+            substitute !vars t)
         with Not_found -> failwith "Fonction Non Définie")
 
 and compat_instances instance_env cident id instances tlist global =
@@ -410,23 +404,76 @@ and typ_atom global_env type_env instance_env global (l, a) =
   | Aident id -> (smaps_find id !cons_env).ctyp
   | Aexpr e -> typ_exp global_env type_env instance_env global e
   | Atypedexpr (e, tau) ->
-      let t = ast_type tau in
+      let t = ast_type global_env type_env instance_env tau in
       if typ_eq t (typ_exp global_env type_env instance_env global e) then t
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
 and typ_branch global_env type_env instance_env t global branch =
   let env_pat = typ_pattern empty type_env instance_env t (fst branch) in
-  let global_env = {bindings = Smaps.union (fun _ a _ -> Some a) env_pat.bindings global_env.bindings; fvars = Vset.union env_pat.fvars global_env.fvars
-  }
-  in typ_exp global_env type_env instance_env global (snd branch)
+  let global_env =
+    {
+      bindings =
+        Smaps.union (fun _ a _ -> Some a) env_pat.bindings global_env.bindings;
+      fvars = Vset.union env_pat.fvars global_env.fvars;
+    }
+  in
+  typ_exp global_env type_env instance_env global (snd branch)
 
-and typ_pattern env type_env instance_env t = function
-  | Parg p -> 
+and typ_pattern global_env type_env instance_env t = function
+  | Parg p -> typ_patarg global_env type_env instance_env t p
   | Pconsarg (id, plist) ->
-  
-  
+      let cons = smaps_find id !cons_env in
+      if not (typ_eq cons.ctyp t) then failwith "Mauvais type de constructeur"
+      else
+        let rec aux env plist tlist =
+          match (plist, tlist) with
+          | [], [] -> env
+          | p :: t1, t :: t2 ->
+              let a = typ_patarg env type_env instance_env t p in
+              let env = aux env t1 t2 in
+              {
+                bindings =
+                  Smaps.union
+                    (fun s _ _ -> failwith "Identifiant utilisé plusieurs fois")
+                    env.bindings a.bindings;
+                fvars = Vset.union a.fvars env.fvars;
+              }
+          | _ -> failwith "Mauvaise Arité pour le Constructeur"
+        in
+        aux global_env plist cons.ctlist
 
+and typ_patarg global_env type_env instance_env t = function
+  | l, Pconst c ->
+      let ctau =
+        match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr
+      in
+      if not (typ_eq ctau t) then failwith "Mauvais Type" else global_env
+  | l, Pident s when is_lower s -> add false s t global_env
+  | l, Pident s ->
+      if not (typ_eq (smaps_find s !cons_env).ctyp t) then
+        failwith "Mauvais Type de Constructeur"
+      else global_env
+  | l, Ppattern p -> typ_pattern global_env type_env instance_env t p
+
+and ast_type global_env type_env instance_env = function
+  | Tatype a -> ast_atype global_env type_env instance_env a
+  | Tntype n -> ast_ntype global_env type_env instance_env n
+
+and ast_atype global_env type_env instance_env = function
+  | Tident s ->
+      let t, arity = smaps_find s type_env in
+      if arity = 0 then t else failwith "Mauvaise arité de constructeur/de type"
+  | Ttype t -> ast_type global_env type_env instance_env t
+
+and ast_ntype global_env type_env instance_env (id, al) =
+  let t, arity = smaps_find id type_env in
+  if List.length al <> arity then failwith "Mauvaise Arité de Constructeur"
+  else
+    match t with
+    | TCons (s, _) ->
+        TCons (s, List.map (ast_atype global_env type_env instance_env) al)
+    | _ -> t
 
 
 (*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
@@ -442,7 +489,8 @@ and typ_pattern env type_env instance_env t = function
          years being the good guy, you know the man in the white fucking hat, \
          for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
-let rec well_formed_declaration global_env type_env instance_env local_env
+(* Le bloc ci-dessous est commenté suite à un changement de perspective. Le bloc ci-dessus est commenté parce que je code avec les pieds. *)
+(* let rec well_formed_declaration global_env type_env instance_env local_env
     declaration =
   let table = Hashtbl.create (List.length declaration.variables) in
   let rec run = function
@@ -497,7 +545,7 @@ and well_formed_ntype global_env type_env instance_env local_env (id, al) =
                well_formed_atype global_env type_env instance_env local_env x)
              al
     | _ -> failwith "Ceci n'est pas un constructeur"
-  with Not_found -> failwith "Constructeur non défini"
+  with Not_found -> failwith "Constructeur non défini" *)
 
 (* Algorithme :
    - On parcourt les déclarations du programme dans l'ordre.
