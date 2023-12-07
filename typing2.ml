@@ -191,21 +191,23 @@ let class_env =
          [] )
        Smaps.empty)
 
-let rec typ_exp global_env type_env (instance_env:(typ list * (ident * typ list) list) list Smaps.t) global loc_expr =
+let rec typ_exp global_env type_env
+    (instance_env : (typ list * (ident * typ list) list) list Smaps.t) global
+    loc_expr =
   let loc, expr = loc_expr in
   match expr with
   | Eunop (_, e) -> (
-      match typ_exp global_env type_env instance_env type_env e with
+      match typ_exp global_env type_env instance_env global e with
       | TInt -> TInt
       | _ ->
           typing_error (fst e)
             "mauvais opérande pour l'opérateur unaire '-' : le type attendu \
              est TInt")
   | Eif (e1, e2, e3) -> (
-      match typ_exp global_env type_env instance_env e1 with
+      match typ_exp global_env type_env instance_env global e1 with
       | TBool ->
-          let s2 = typ_exp global_env type_env instance_env e2 in
-          let s3 = typ_exp global_env type_env instance_env e3 in
+          let s2 = typ_exp global_env type_env instance_env global e2 in
+          let s3 = typ_exp global_env type_env instance_env global e3 in
           if typ_eq s2 s3 then s2
           else
             typing_error (fst e3) "les deux branches doivent être de même type"
@@ -214,12 +216,8 @@ let rec typ_exp global_env type_env (instance_env:(typ list * (ident * typ list)
             "mauvais type de l'expression de condition : le type attendu est \
              Bool")
   | Ebinop (e1, op, e2) -> (
-      let s1 =
-        typ_exp global_env type_env instance_env type_env instance_env e1
-      in
-      let s2 =
-        typ_exp global_env type_env instance_env type_env instance_env e2
-      in
+      let s1 = typ_exp global_env type_env instance_env global e1 in
+      let s2 = typ_exp global_env type_env instance_env global e2 in
       let binop_string = Pretty.print_binop op in
       if s1 <> s2 then
         typing_error (fst e2)
@@ -275,23 +273,7 @@ let rec typ_exp global_env type_env (instance_env:(typ list * (ident * typ list)
         l;
       TCons ("Effect", [ TUnit ])
   | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
-  | Ecase (e, l) ->
-      let t = typ_exp global_env type_env instance_env global e in
-      let rettypes =
-        List.map
-          (fun x -> typ_branch global_env type_env instance_env global x)
-          l
-      in
-      let tret = snd (List.hd rettypes) in
-      (* TODO: préciser encore plus quelle branche est mal typée *)
-      List.iter
-        (fun x ->
-          if not (typ_eq t (fst x) && typ_eq tret (snd x)) then
-            typing_error (fst e)
-              "l'expression n'est pas du même type que le pattern de la branche"
-            (*Ce message d'erreur ne veut rien dire*))
-        rettypes;
-      tret
+  | Ecase (e, l) -> TUnit (*A Coder*)
   | Elet (bl, e) ->
       typ_exp
         (List.fold_left
@@ -323,34 +305,51 @@ let rec typ_exp global_env type_env (instance_env:(typ list * (ident * typ list)
               (frth (Smaps.find id !function_env))
           in
           if Smaps.mem id global_env.bindings then failwith "Pas une fonction"
-          else(
+          else (
             (match thrd (Smaps.find id !function_env) with
             | None -> TBool
             | Some cident ->
                 let instances = Smaps.find cident instance_env in
-                compat_instances instance_env cident id instances (List.map (typ_atom global_env type_env instance_env global) al));
-          
-                let tlist, t = 
+                compat_instances instance_env cident id instances
+                  (List.map
+                     (fun a -> typ_atom global_env type_env instance_env global a)
+                     al) global) ;
+            let tlist, t =
               match frst (smaps_find id !function_env) with
-                | TArrow(tlist, t) -> tlist, t
-                | _ -> failwith "Ma qué pasta"
-                
+              | TArrow (tlist, t) -> (tlist, t)
+              | _ -> failwith "Ma qué pasta"
             in
+
             let vars = ref Smaps.empty in
-            let rec aux tlist alist = 
+            let rec aux tlist alist =
               match (tlist, alist) with
               | [], [] -> ()
-              | t::q1, a::q2 -> (
-                match t with 
-                | TAlias s -> (
-                  let tau = typ_atom global_env type_env instance_env global a in
-                  match tau with
-                  | TAlias _ -> pattern
-                )
-
-              ) 
-            
-            )
+              | t :: t1, a :: t2 -> (
+                  match t with
+                  | TAlias s -> (
+                      let tau =
+                        typ_atom global_env type_env instance_env global a
+                      in
+                      match tau with
+                      | TAlias _ -> aux t1 t2
+                      | _ ->
+                          if
+                            Smaps.mem s !vars
+                            && not (typ_eq tau (smaps_find s !vars))
+                          then failwith "Types Différents"
+                          else vars := Smaps.add s tau !vars;
+                          aux t1 t2)
+                  | _ ->
+                      if
+                        not
+                          (typ_eq t
+                             (typ_atom global_env type_env instance_env global a))
+                      then failwith "Mauvais Type d'Argument"
+                      else aux t1 t2)
+              | _ -> failwith "Trop d'arguments"
+            in
+            aux tlist al;
+            sub !vars t)
         with Not_found -> failwith "Fonction Non Définie")
 
 and compat_instances instance_env cident id instances tlist global =
@@ -416,25 +415,20 @@ and typ_atom global_env type_env instance_env global (l, a) =
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
-and typ_pattern global_env type_env instance_env global = function
-  | Parg (l, p) -> typ_patarg global_env type_env instance_env global (l, p)
-  | Pconsarg (id, l) -> TBool (*Pas codé encore*)
+and typ_branch global_env type_env instance_env t global branch =
+  let env_pat = typ_pattern empty type_env instance_env t (fst branch) in
+  let global_env = {bindings = Smaps.union (fun _ a _ -> Some a) env_pat.bindings global_env.bindings; fvars = Vset.union env_pat.fvars global_env.fvars
+  }
+  in typ_exp global_env type_env instance_env global (snd branch)
 
-and typ_patarg global_env type_env instance_env global (l, p) =
-  match p with
-  | Pconst c -> (
-      match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
-  | Pident id -> (
-      try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
-  | Ppattern p -> typ_pattern global_env type_env instance_env global p
+and typ_pattern env type_env instance_env t = function
+  | Parg p -> 
+  | Pconsarg (id, plist) ->
+  
+  
 
-and typ_binding global_env type_env instance_env = function
-  | id, e ->
-      add true id (typ_exp global_env type_env instance_env global e) global_env
 
-and typ_branch global_env type_env instance_env global (p, e) =
-  ( typ_pattern global_env type_env instance_env global p,
-    typ_exp global_env type_env instance_env global e )
+
 (*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
   | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
   | _ ->
