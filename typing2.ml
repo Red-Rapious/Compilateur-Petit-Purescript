@@ -176,6 +176,8 @@ let class_env =
          [] )
        Smaps.empty)
 
+let curr_defined = ref ""
+let eqlist = ref []
 let rec substitute set t =
   match head t with
   | TAlias s -> smaps_find s set
@@ -335,7 +337,6 @@ let rec typ_exp global_env type_env
               | TArrow (tlist, t) -> (tlist, t)
               | _ -> failwith "Ma qué pasta"
             in
-
             let vars = ref Smaps.empty in
             let rec aux tlist alist =
               match (tlist, alist) with
@@ -390,16 +391,16 @@ and compat_instances instance_env cident id instances tlist global =
     | [], [] -> true
     | _ -> false
   in
-  let rec basic_instinct instance_env tlist = function
+  let rec basic_instinct tlist = function
     | [] -> false
     | h :: t ->
         (((not global) && valid h tlist) || (global && unify h tlist))
-        || basic_instinct instance_env tlist t
+        || basic_instinct tlist t
   in
   let rec all_basic_instinct instance_env = function
     | [] -> true
     | (s, tlist) :: q ->
-        basic_instinct instance_env tlist
+        basic_instinct tlist
           (List.map fst (smaps_find s instance_env))
         && all_basic_instinct instance_env q
   in
@@ -407,7 +408,7 @@ and compat_instances instance_env cident id instances tlist global =
     | [] ->
         failwith
           ("Pas d'instance compatible pour la classe " ^ cident
-         ^ " en appelant " ^ f)
+         ^ " en appelant " ^ id)
     | tl :: q
       when (((not global) && valid (fst tl) tlist)
            || (global && unify (fst tl) tlist))
