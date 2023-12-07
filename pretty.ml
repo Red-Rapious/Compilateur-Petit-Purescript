@@ -29,7 +29,7 @@ let print_token t = match t with
 | DIV -> "/ "
 | AND -> "&& "
 | OR -> "|| "
-| DOUBLE_EQ -> "== "
+(*| DOUBLE_EQ -> "== "*)
 (*| NEQ -> "!= "*)
 | POINT -> ". "
 | COMMA -> ", "

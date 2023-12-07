@@ -13,7 +13,7 @@
 %token LPAREN RPAREN
 %token PLUS MINUS TIMES DIV
 %token AND OR
-%token DOUBLE_EQ SIMPLE_EQ
+%token /*DOUBLE_EQ*/ SIMPLE_EQ
 %token CONCAT
 %token LBRACK RBRACK
 %token DOUBLE_ARROW SIMPLE_ARROW DOUBLE_POINTS POINT
@@ -27,7 +27,7 @@
 %nonassoc IN ELSE
 %left OR 
 %left AND
-%nonassoc DOUBLE_EQ NEQ CMP
+%nonassoc /*DOUBLE_EQ NEQ*/ CMP
 %left PLUS MINUS CONCAT
 %left TIMES DIV
 %nonassoc UNITARY_MINUS
@@ -86,14 +86,32 @@ decl:
 
 ;
 
-ntype_arrow: n=ntype DOUBLE_ARROW { n };
-ntype_arrow_list: ntypes=list(ntype_arrow) { ntypes }
+(*ntype_arrow: n=ntype DOUBLE_ARROW { n };
+ntype_arrow_list: ntypes=list(ntype_arrow) { ntypes };
 type_arrow: t=typ SIMPLE_ARROW { t };
-type_arrow_list: types=list(type_arrow) { types }
+type_arrow_list: types=list(type_arrow) { types }*)
+
+ntype_arrow_list:
+| n=ntype DOUBLE_ARROW { [n] }
+| n=ntype DOUBLE_ARROW l=ntype_arrow_list { n::l }
+;
+
+type_arrow_list:
+| t=typ SIMPLE_ARROW { [t] }
+| t=typ SIMPLE_ARROW l=type_arrow_list { t::l }
+;
+
 tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
 tdecl_end:
-  ntypes=ntype_arrow_list types=type_arrow_list (* ICI RÉSIDE LE PROBLÈME *)
+  ntypes=option(ntype_arrow_list) types=option(type_arrow_list) (* ICI RÉSIDE LE PROBLÈME *)
   out_type=typ {
+    let ntypes = match ntypes with
+    | None -> []
+    | Some x -> x
+    and types = match types with
+    | None -> []
+    | Some x -> x
+    in
     {
       name="";
       variables=[];
@@ -104,9 +122,9 @@ tdecl_end:
   }
 
 
-tdecl:
- | name=lident DOUBLE_POINTS 
-  variables=option(tdecl_variables) 
+(*tdecl:
+  name=lident DOUBLE_POINTS 
+  variables=option(tdecl_variables)
   tend=tdecl_end
   { 
     let variables = match variables with
@@ -121,7 +139,29 @@ tdecl:
       out_type=tend.out_type
     }
   }
-;
+;*)
+
+tdecl:
+  name=lident DOUBLE_POINTS 
+  variables=option(tdecl_variables) 
+  ntypes=option(ntype_arrow_list)
+  types=option(type_arrow_list)
+  out_type=typ {
+    let variables = match variables with
+    | Some v -> v
+    | None -> []
+    and ntypes = match ntypes with
+    | None -> []
+    | Some x -> x
+    in
+    {
+      name;
+      variables;
+      ntypes;
+      types=[];
+      out_type
+    }
+  }
 
 defn: name = lident args = list(loc_patarg) SIMPLE_EQ e = loc_expr 
   { (name, args, e) }
@@ -157,25 +197,25 @@ patarg:
 ;
 
 pattern:
-| p = loc_patarg                        { Parg p }
-| id = uident l = nonempty_list(loc_patarg) { Pnamedarg (id, l) }
+| p = loc_patarg                            { Parg p }
+| id = uident l = nonempty_list(loc_patarg) { Pconsarg (id, l) }
 
 loc_atom: a=atom { ($loc, a) };
 atom:
-| c = CST                                       { Aconst c }
-| id = lident                                   { Aident id }
-| id = uident                                   { Aident id }
-| LPAREN e=loc_expr RPAREN                      { Aexpr e }
-| LPAREN e=loc_expr DOUBLE_POINTS t=typ RPAREN  { Atypedexpr (e, t) }
+| c = CST                                                   { Aconst c }
+| id = lident                                               { Aident id }
+| id = uident                                               { Aident id }
+| LPAREN e=loc_expr RPAREN                                  { Aexpr e }
+| LPAREN e=loc_expr DOUBLE_POINTS t=typ RPAREN              { Atypedexpr (e, t) }
 ;
 
 loc_expr: e=expr { ($loc, e) };
 expr:
-| a = loc_atom                                  { Eatom a }
-| MINUS e = loc_expr %prec UNITARY_MINUS            { Eunop (Uneg, e) }
-| e1 = loc_expr o = binop e2 = loc_expr                 { Ebinop (e1, o, e2) }
-| id = lident a = nonempty_list(loc_atom)           { Efunc (id, a) }
-| id = uident a = nonempty_list(loc_atom)           { Efunc (id, a) }
+| a = loc_atom                                              { Eatom a }
+| MINUS e = loc_expr %prec UNITARY_MINUS                    { Eunop (Uneg, e) }
+| e1 = loc_expr o = binop e2 = loc_expr                     { Ebinop (e1, o, e2) }
+| id = lident a = nonempty_list(loc_atom)                   { Efunc (id, a) }
+| id = uident a = nonempty_list(loc_atom)                   { Efunc (id, a) }
 | IF e1=loc_expr THEN e2=loc_expr ELSE e3=loc_expr          { Eif (e1, e2, e3) }
 | DO LBRACK el=separated_nonempty_list(SEMICOLON, loc_expr) RBRACK
                                                 { Edo el }
