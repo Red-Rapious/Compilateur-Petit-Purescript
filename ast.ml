@@ -106,6 +106,6 @@ type ttyp =
   | TEffect of ttyp
   | TArrow of ttyp list * ttyp
   | TVar of tvar
-  | TCons of ttyp list
+  | TCons of string * ttyp list
 
 and tvar = { id : int; mutable def : ttyp option }
