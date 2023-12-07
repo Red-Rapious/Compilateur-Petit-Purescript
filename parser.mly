@@ -48,7 +48,7 @@ uident: id = UIDENT { id };
 
 /* Règles de grammaire */
 file:
-  MODULE_MAIN i=imports d=separated_nonempty_list(SEMICOLON, decl) EOF
+  MODULE_MAIN WHERE LBRACK i=imports SEMICOLON d=separated_nonempty_list(SEMICOLON, decl) RBRACK EOF
     { { main = d } }
 ;
 

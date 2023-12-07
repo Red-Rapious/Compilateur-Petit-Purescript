@@ -378,5 +378,3 @@ let base_env =
 let type_file file =
   let env = base_env in
   List.fold_left (fun env x -> type_decl env empty x) env file
-
-

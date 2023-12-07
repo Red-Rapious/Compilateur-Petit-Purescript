@@ -69,7 +69,7 @@ rule token = parse
   | "."                   { POINT }
   | ","                   { COMMA }
   | integer as i          { CST (Cint (int_of_string i))}
-  | "module Main where"   { MODULE_MAIN }
+  | "module Main"         { MODULE_MAIN }
   | "import Prelude\nimport Effect\nimport Effect.Console\n"
                           { new_line lexbuf; new_line lexbuf; new_line lexbuf; IMPORTS }
   | lident as i           { id_or_kwd i }

@@ -60,7 +60,7 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    List.iter (fun d -> let _ = Typing.type_decl empty d in ()) p.main;
+    ignore (Typing.type_file p.main);
 
     if !type_only then exit 0;
     failwith "La production de code n'est pas implémentée pour l'instant"
