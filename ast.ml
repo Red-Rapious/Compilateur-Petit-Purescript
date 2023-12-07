@@ -79,8 +79,8 @@ type decl =
 and fdecl = {
   name: ident;
   variables: ident list;
-  ntypes: ntype list;
-  types: typ list;
+  mutable ntypes: ntype list;
+  mutable types: typ list;
   out_type: typ
 }
 

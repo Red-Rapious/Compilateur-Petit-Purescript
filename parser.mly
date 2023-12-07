@@ -1,6 +1,11 @@
 /* Analyseur syntaxique */
 %{
   open Ast
+  type type_list_triplet = {
+    n:ntype list;
+    t:typ list;
+    o:typ
+  }
 %}
 
 /* Déclaration des tokens */
@@ -86,12 +91,8 @@ decl:
 
 ;
 
-(*ntype_arrow: n=ntype DOUBLE_ARROW { n };
-ntype_arrow_list: ntypes=list(ntype_arrow) { ntypes };
-type_arrow: t=typ SIMPLE_ARROW { t };
-type_arrow_list: types=list(type_arrow) { types }*)
-
-ntype_arrow_list:
+(* TODO: utiliser une seule fonction à la main *)
+(*ntype_arrow_list:
 | n=ntype DOUBLE_ARROW { [n] }
 | n=ntype DOUBLE_ARROW l=ntype_arrow_list { n::l }
 ;
@@ -101,7 +102,6 @@ type_arrow_list:
 | t=typ SIMPLE_ARROW l=type_arrow_list { t::l }
 ;
 
-tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
 tdecl_end:
   ntypes=option(ntype_arrow_list) types=option(type_arrow_list) (* ICI RÉSIDE LE PROBLÈME *)
   out_type=typ {
@@ -119,49 +119,49 @@ tdecl_end:
       types;
       out_type
     }
-  }
+  }*)
 
-
-(*tdecl:
-  name=lident DOUBLE_POINTS 
-  variables=option(tdecl_variables)
-  tend=tdecl_end
-  { 
-    let variables = match variables with
-    | Some v -> v
-    | None -> []
-    in
+tdecl_variables: FORALL variables=nonempty_list(lident) POINT { variables };
+type_list:
+| n=ntype DOUBLE_ARROW l=type_list {
     {
-      name;
-      variables;
-      ntypes=tend.ntypes;
-      types=tend.types;
-      out_type=tend.out_type
+      n=n::l.n;
+      t=l.t;
+      o=l.o
     }
   }
-;*)
+| t=typ SIMPLE_ARROW l=type_list {
+    {
+      n=l.n;
+      t=t::l.t;
+      o=l.o
+    }
+  }
+| t=typ {
+    {
+      n=[];
+      t=[];
+      o=t
+    }
+}
+
+
 
 tdecl:
-  name=lident DOUBLE_POINTS 
-  variables=option(tdecl_variables) 
-  ntypes=option(ntype_arrow_list)
-  types=option(type_arrow_list)
-  out_type=typ {
+  name=lident DOUBLE_POINTS variables=option(tdecl_variables) l=type_list {
     let variables = match variables with
     | Some v -> v
     | None -> []
-    and ntypes = match ntypes with
-    | None -> []
-    | Some x -> x
     in
     {
       name;
       variables;
-      ntypes;
-      types=[];
-      out_type
+      ntypes=l.n;
+      types=l.t;
+      out_type=l.o
     }
   }
+;
 
 defn: name = lident args = list(loc_patarg) SIMPLE_EQ e = loc_expr 
   { (name, args, e) }
