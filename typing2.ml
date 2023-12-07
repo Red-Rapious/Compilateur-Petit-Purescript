@@ -178,6 +178,7 @@ let class_env =
 
 let curr_defined = ref ""
 let eqlist = ref []
+
 let rec substitute set t =
   match head t with
   | TAlias s -> smaps_find s set
@@ -400,8 +401,7 @@ and compat_instances instance_env cident id instances tlist global =
   let rec all_basic_instinct instance_env = function
     | [] -> true
     | (s, tlist) :: q ->
-        basic_instinct tlist
-          (List.map fst (smaps_find s instance_env))
+        basic_instinct tlist (List.map fst (smaps_find s instance_env))
         && all_basic_instinct instance_env q
   in
   let rec find_valid tlist = function
@@ -498,18 +498,71 @@ and ast_ntype global_env type_env instance_env (id, al) =
         TCons (s, List.map (ast_atype global_env type_env instance_env) al)
     | _ -> t
 
-(*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
-  | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
-  | _ ->
-      (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
-      failwith
-        "You think I hate you? I don't hate you. This job is eating me alive, \
-         I can't breathe anymore, and if I come out this guy Lefty dies. \
-         They're gonna kill him because he vouched for me because he stood up \
-         for me I live with that every day. That's the same thing as if I put \
-         the bullet in his head myself, you understand? I spent all these \
-         years being the good guy, you know the man in the white fucking hat, \
-         for what? For nothing. I'm not becoming like them Maggie, I am them."*)
+and exhaustive_list global_env type_env instance_env tlist pllist =
+  let rec is_ident = function
+    | Parg (l, Pident s) when is_lower s -> true
+    | Parg (l, Ppattern p) -> is_ident p
+    | _ -> false
+  in
+  let rec is_bool b = function
+    | Parg (l, Pconst (Cbool x)) -> x = b
+    | Parg (l, Ppattern p) -> is_bool p
+    | _ -> false
+  in
+  let rec is_cons c = function
+    | Parg (l, Pident s) when s = c -> true
+    | Pconsarg (s, _) when s = c -> true
+    | Parg (l, Ppattern p) -> is_cons c p
+    | _ -> false
+  in
+  let rec get_list = function
+  | [] -> []
+  | (Pconsarg(_, x) :: _)::t -> List.map (fun t -> Parg(t)) x :: get_list t
+  | (Parg(l, Pident s) :: _) :: t when not (is_lower s) -> get_list t
+  | (Parg(l, Ppattern p) :: t1) :: t2 -> get_list ((p :: t1) :: t2)
+  | _ -> failwith "Erreur de Syntaxe détectée au typage ???"
+in
+  let rec is_id_in_list f i = function
+    | [] -> []
+    | x :: t when f (List.nth x i) -> x :: is_id_in_list f i t
+    | _ :: t -> is_id_in_list f i t
+  in
+
+  let rec aux i l =
+    if l = [] then false
+    else if i >= List.length tlist then true
+    else
+      match List.nth tlist i with
+      | TBool ->
+          aux (i + 1) (is_id_in_list is_ident i l)
+          || aux (i + 1) (is_id_in_list (is_bool true) i l)
+             && aux (i + 1) (is_id_in_list (is_bool false) i l)
+      | TCons (s, []) ->
+          aux (i + 1) (is_id_in_list is_ident i l)
+          || Smaps.for_all
+               (fun _ c ->
+                 (not (typ_eq c.ctyp (List.nth tlist i)))
+                 || aux (i + 1) (is_id_in_list (is_cons c.cident) i l)
+                    && exhaustive_list global_env type_env instance_env c.ctlist
+                         (get_list (is_id_in_list (is_cons c.cident) i l)))
+               !cons_env
+      | _ -> aux (i + 1) (is_id_in_list is_ident i l)
+  in
+  List.length tlist = 0 || aux 0 pllist
+
+(*and typ_b
+  ranch global_env type_env instance_env    type_env instance_env    (p, e) = function
+    | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
+    | _ ->
+        (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
+        failwith
+          "You think I hate you? I don't hate you. This job is eating me alive, \
+           I can't breathe anymore, and if I come out this guy Lefty dies. \
+           They're gonna kill him because he vouched for me because he stood up \
+           for me I live with that every day. That's the same thing as if I put \
+           the bullet in his head myself, you understand? I spent all these \
+           years being the good guy, you know the man in the white fucking hat, \
+           for what? For nothing. I'm not becoming like them Maggie, I am them."*)
 
 (* Le bloc ci-dessous est commenté suite à un changement de perspective. Le bloc ci-dessus est commenté parce que je code avec les pieds. *)
 (* let rec well_formed_declaration global_env type_env instance_env local_env
