@@ -43,7 +43,7 @@ and loc_patarg = loc * patarg
 
 and pattern = 
 | Parg of loc_patarg
-| Pnamedarg of ident * (loc_patarg list)
+| Pconsarg of ident * (loc_patarg list)
 
 type expr =
 | Eatom of loc_atom

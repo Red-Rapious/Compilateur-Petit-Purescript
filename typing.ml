@@ -139,6 +139,22 @@ and ast_atype =  function
 and ast_ntype (id, l) =
   let cons_arg = List.map ast_atype l in TCons(cons_arg)
 
+
+
+let rec check_exhaustivity global_env local_env tau patarglist =
+  let rec has_id = function
+  | Pconsarg (id, []) -> false
+  | Pconsarg (id, (l, Ppattern p)::q) -> has_id p || has_id (Pconsarg(id, q))
+  | Pconsarg (id,(l, Pident _ ):: _ ) -> true
+  | Parg(l, Ppattern p) -> has_id p
+  | _ -> false
+  in
+  let rec has_bool b = function
+  | Pconsarg(id, []) -> false
+  | Pconsarg(id, _) -> true
+  | _ -> true
+in true
+
 let rec typ_exp global_env local_env loc_expr =
   let loc, expr = loc_expr in
   match expr with
@@ -256,7 +272,7 @@ and typ_atom global_env local_env (l, a) =
 
 and typ_pattern global_env local_env = function
   | Parg (l, p) -> typ_patarg global_env local_env (l, p)
-  | Pnamedarg (id, l) -> TBool (*Pas compris encore*)
+  | Pconsarg (id, l) -> TBool (*Pas compris encore*)
 
 and typ_patarg global_env local_env (l, p) =
   match p with
