@@ -4,7 +4,7 @@ open Pretty
 let rec typ_eq t1 t2 =
   match (t1, t2) with
   | TUnit, TUnit | TStr, TStr | TInt, TInt | TBool, TBool -> true
-  | TEffect t1, TEffect t2 -> typ_eq t1 t2
+  (*| TEffect t1, TEffect t2 -> typ_eq t1 t2*)
   | TCons(s1, t1), TCons(s2, t2) -> s1 == s2 || List.for_all2 typ_eq t1 t2
   | TArrow (t1, t2), TArrow (t3, t4) ->
       List.for_all2 typ_eq t1 t3 && typ_eq t2 t4
@@ -37,7 +37,7 @@ let rec head = function TVar { def = Some t } -> head t | t -> t
 let rec canon t =
   match head t with
   | (TInt | TBool | TStr | TUnit) as t -> t
-  | TEffect t1 -> TEffect (canon t1)
+  (*| TEffect t1 -> TEffect (canon t1)*)
   | TVar { id = a; def = None } as t -> t
   | TVar { id = a; def = Some t } -> TVar { id = a; def = Some (canon t) }
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
@@ -73,7 +73,7 @@ let rec unify t1 t2 =
       unify t12 t22
   | TCons(s1, t1), TCons(s2, t2) -> List.iter2 unify t1 t2
   | TInt, TInt | TBool, TBool | TStr, TStr | TUnit, TUnit -> ()
-  | TEffect t1, TEffect t2 when typ_eq t1 t2 -> ()
+  (* | TEffect t1, TEffect t2 when typ_eq t1 t2 -> () *)
   | t1, t2 -> unification_error t1 t2
 
 module Vset = Set.Make (V)
@@ -81,7 +81,7 @@ module Vset = Set.Make (V)
 let rec fvars t =
   match head t with
   | TInt | TStr | TBool | TUnit -> Vset.empty
-  | TEffect t -> fvars t
+  (* | TEffect t -> fvars t *)
   | TArrow (t1, t2) -> List.fold_left Vset.union (fvars t2) (List.map fvars t1)
   | TVar v -> Vset.singleton v
   | TCons(s, t) -> List.fold_left Vset.union Vset.empty (List.map fvars t)
@@ -118,7 +118,7 @@ let find x global_env =
     match head t with
     | TVar x as t -> ( try Vmap.find x s with Not_found -> t)
     | (TInt | TBool | TStr | TUnit) as t -> t
-    | TEffect t -> TEffect (subst t)
+    (* | TEffect t -> TEffect (subst t) *)
     | TArrow (t1, t2) -> TArrow (List.map subst t1, subst t2)
     | TCons(s,  t) -> TCons (s, List.map subst t)
   in
@@ -231,13 +231,13 @@ let rec typ_exp global_env local_env loc_expr =
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
   | Eatom a -> typ_atom global_env local_env a
-  | Edo l ->
-      List.iter
+  | Edo l -> failwith "TODO"
+      (* List.iter
         (fun e ->
           if not (typ_eq (typ_exp global_env local_env e) (TEffect TUnit)) then
             typing_error (fst e) "le type attendu est Unit")
         l;
-      TEffect TUnit
+      TEffect TUnit *)
   | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
   | Ecase (e, l) ->
       let t = typ_exp global_env local_env e in
