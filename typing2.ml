@@ -263,16 +263,38 @@ let rec typ_exp global_env type_env
           then typing_error (fst e) "le type attendu est Effect Unit")
         l;
       TCons ("Effect", [ TUnit ])
-  | Ecase (e, []) -> raise (Empty_pattern_matching (fst e))
-  | Ecase (e, l) -> TUnit (*A Coder*)
+  | Ecase (e, bl) -> (
+      let t = typ_exp global_env type_env instance_env global e in
+      match bl with
+      | [] -> failwith "Empty Pattern Matching Bro"
+      | b :: tail ->
+          let tau = typ_branch global_env type_env instance_env t global b in
+          List.iter
+            (fun x ->
+              if
+                not
+                  (typ_eq tau
+                     (typ_branch global_env type_env instance_env t global x))
+              then failwith "Mauvais Type de Pattern"
+              else ())
+            tail;
+          if
+            not
+              (exhaustive_list global_env type_env instance_env [ t ]
+                 (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
+          then failwith "Pattern Non Exhaustif"
+          else tau)
   | Elet (bl, e) ->
-      let rec aux global_env type_env instance_env l = 
-        match l with 
-        | b :: t -> let tau = typ_exp global_env type_env instance_env global (snd b) in
-        aux (add true (fst b) tau global_env) type_env instance_env t
+      let rec aux global_env type_env instance_env l =
+        match l with
+        | b :: t ->
+            let tau = typ_exp global_env type_env instance_env global (snd b) in
+            aux (add true (fst b) tau global_env) type_env instance_env t
         | [] -> global_env
-      in 
-      typ_exp (aux global_env type_env instance_env bl) type_env instance_env global e
+      in
+      typ_exp
+        (aux global_env type_env instance_env bl)
+        type_env instance_env global e
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
@@ -475,7 +497,6 @@ and ast_ntype global_env type_env instance_env (id, al) =
         TCons (s, List.map (ast_atype global_env type_env instance_env) al)
     | _ -> t
 
-
 (*and typ_branch global_env type_env instance_env    type_env instance_env    (p, e) = function
   | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
   | _ ->
@@ -491,61 +512,61 @@ and ast_ntype global_env type_env instance_env (id, al) =
 
 (* Le bloc ci-dessous est commenté suite à un changement de perspective. Le bloc ci-dessus est commenté parce que je code avec les pieds. *)
 (* let rec well_formed_declaration global_env type_env instance_env local_env
-    declaration =
-  let table = Hashtbl.create (List.length declaration.variables) in
-  let rec run = function
-    | h :: t ->
-        Hashtbl.add table h h;
-        run t
-    | [] -> ()
-  in
-  run declaration.variables;
-  List.for_all
-    (fun i ->
-      well_formed_instance global_env type_env instance_env local_env (Intype i))
-    declaration.ntypes
-  && List.for_all
-       (fun i -> well_formed_typ global_env type_env instance_env local_env i)
-       declaration.types
+       declaration =
+     let table = Hashtbl.create (List.length declaration.variables) in
+     let rec run = function
+       | h :: t ->
+           Hashtbl.add table h h;
+           run t
+       | [] -> ()
+     in
+     run declaration.variables;
+     List.for_all
+       (fun i ->
+         well_formed_instance global_env type_env instance_env local_env (Intype i))
+       declaration.ntypes
+     && List.for_all
+          (fun i -> well_formed_typ global_env type_env instance_env local_env i)
+          declaration.types
 
-and well_formed_instance global_env type_env instance_env local_env = function
-  | Intype (n, n1) -> true
-  | Iarrow (nl, n) ->
-      if
-        List.for_all
-          (fun x ->
-            well_formed_ntype global_env type_env instance_env local_env x)
-          nl
-      then well_formed_ntype global_env type_env instance_env local_env n
-      else false
-
-and well_formed_typ global_env type_env instance_env local_env t =
-  match t with
-  | Tatype a -> well_formed_atype global_env type_env instance_env local_env a
-  | Tntype n -> well_formed_ntype global_env type_env instance_env local_env n
-
-and well_formed_atype global_env type_env instance_env local_env = function
-  | Tident id -> (
-      try
-        let _ = find id local_env in
-        true
-      with Not_found -> failwith "Type non défini")
-  | Ttype t -> well_formed_typ global_env type_env instance_env local_env t
-
-and well_formed_ntype global_env type_env instance_env local_env (id, al) =
-  try
-    let l = find id global_env in
-    (*On vérifie que le constructeur étudié est bien défini*)
-    match l with
-    | TCons (s, nl) ->
-        (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
-        List.length nl == List.length al
-        && List.for_all
+   and well_formed_instance global_env type_env instance_env local_env = function
+     | Intype (n, n1) -> true
+     | Iarrow (nl, n) ->
+         if
+           List.for_all
              (fun x ->
-               well_formed_atype global_env type_env instance_env local_env x)
-             al
-    | _ -> failwith "Ceci n'est pas un constructeur"
-  with Not_found -> failwith "Constructeur non défini" *)
+               well_formed_ntype global_env type_env instance_env local_env x)
+             nl
+         then well_formed_ntype global_env type_env instance_env local_env n
+         else false
+
+   and well_formed_typ global_env type_env instance_env local_env t =
+     match t with
+     | Tatype a -> well_formed_atype global_env type_env instance_env local_env a
+     | Tntype n -> well_formed_ntype global_env type_env instance_env local_env n
+
+   and well_formed_atype global_env type_env instance_env local_env = function
+     | Tident id -> (
+         try
+           let _ = find id local_env in
+           true
+         with Not_found -> failwith "Type non défini")
+     | Ttype t -> well_formed_typ global_env type_env instance_env local_env t
+
+   and well_formed_ntype global_env type_env instance_env local_env (id, al) =
+     try
+       let l = find id global_env in
+       (*On vérifie que le constructeur étudié est bien défini*)
+       match l with
+       | TCons (s, nl) ->
+           (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
+           List.length nl == List.length al
+           && List.for_all
+                (fun x ->
+                  well_formed_atype global_env type_env instance_env local_env x)
+                al
+       | _ -> failwith "Ceci n'est pas un constructeur"
+     with Not_found -> failwith "Constructeur non défini" *)
 
 (* Algorithme :
    - On parcourt les déclarations du programme dans l'ordre.
