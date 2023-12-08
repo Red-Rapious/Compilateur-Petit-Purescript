@@ -143,34 +143,36 @@ let thrd (a, b, c, d) = c
 let frth (a, b, c, d) = d
 
 let smaps_find id env =
-  try Smaps.find id env with Not_found -> failwith "Identificateur Indéfini"
+  try Smaps.find id env 
+with Not_found -> raise (Unknown_ident (failwith "localiser l'ident", id))
 
 let function_env =
   ref
     ( List.fold_left2
         (fun env x t -> Smaps.add x t env)
         Smaps.empty
-        [ "not"; "mod"; "log"; "pure"; "show" ],
-      [
-        (TArrow ([ TBool ], TBool), Smaps.empty, None, Smaps.empty);
-        (TArrow ([ TInt; TInt ], TInt), Smaps.empty, None, Smaps.empty);
-        ( TArrow ([ TStr ], TCons ("Effect", [ TUnit ])),
-          Smaps.empty,
-          None,
-          Smaps.empty );
-        ( TArrow ([ TAlias "a" ], TCons ("Effect", [ TAlias "a" ])),
-          Smaps.add "a" (TAlias "a", 0) Smaps.empty,
-          None,
-          Smaps.empty );
-        ( TArrow ([ TAlias "a" ], TStr),
-          Smaps.add "a" (TAlias "a", 0) Smaps.empty,
-          Some "Show",
-          Smaps.empty );
-      ] )
+        [ "not"; "mod"; "log"; "pure"; "show" ]
+        [
+          (TArrow ([ TBool ], TBool), Smaps.empty, None, Smaps.empty);
+          (TArrow ([ TInt; TInt ], TInt), Smaps.empty, None, Smaps.empty);
+          ( TArrow ([ TStr ], TCons ("Effect", [ TUnit ])),
+            Smaps.empty,
+            None,
+            Smaps.empty );
+          ( TArrow ([ TAlias "a" ], TCons ("Effect", [ TAlias "a" ])),
+            Smaps.add "a" (TAlias "a", 0) Smaps.empty,
+            None,
+            Smaps.empty );
+          ( TArrow ([ TAlias "a" ], TStr),
+            Smaps.add "a" (TAlias "a", 0) Smaps.empty,
+            Some "Show",
+            Smaps.empty );
+        ] )
 
 let cons_env = ref Smaps.empty
 
-let (global_env_instances : (typ list*(ident*(typ list))list ) list Smaps.t ref) = ref (Smaps.add "Show" ([([TInt],[]);([TBool],[])]) Smaps.empty)
+let global_env_instances : (ttyp list*(ident*(ttyp list))list ) list Smaps.t ref = 
+  ref (Smaps.add "Show" ([([TInt],[]);([TBool],[])]) Smaps.empty)
 
 let class_env =
   ref
@@ -190,7 +192,7 @@ let rec substitute set t =
   | _ as t -> t
 
 let rec typ_exp global_env type_env
-    (instance_env : (typ list * (ident * typ list) list) list Smaps.t) global
+    (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) global
     loc_expr =
   let loc, expr = loc_expr in
   match expr with
@@ -409,8 +411,7 @@ and compat_instances instance_env cident id instances tlist global =
         && all_basic_instinct instance_env q
   in
   let rec find_valid tlist = function
-    | [] ->
-        failwith "Instances Incompatibles"
+    | [] -> failwith "Instances Incompatibles"
     | tl :: q
       when (((not global) && valid (fst tl) tlist)
            || (global && unify (fst tl) tlist))
@@ -418,7 +419,7 @@ and compat_instances instance_env cident id instances tlist global =
         ()
     | tl :: q -> find_valid tlist q
   in
-  find_valid instances variables
+  find_valid variables instances ; failwith "YO IL FAUT UN TTYP ICI"
 
 and typ_atom global_env type_env instance_env global (l, a) =
   match a with
@@ -508,7 +509,7 @@ and exhaustive_list global_env type_env instance_env tlist pllist =
   in
   let rec is_bool b = function
     | Parg (l, Pconst (Cbool x)) -> x = b
-    | Parg (l, Ppattern p) -> is_bool p
+    | Parg (l, Ppattern p) -> is_bool b p (* à vérifier *)
     | _ -> false
   in
   let rec is_cons c = function
@@ -571,7 +572,7 @@ let verify_def global_env type_env instance_env =
         i
   in
   let rec aux col definition =
-    Parg ("là je sais pas comment faire", List.nth (sand definition) col)
+    Parg (failwith "là je sais pas comment faire, insère la localisation siouplé", List.nth (sand definition) col)
   in
   if !curr_defined = "" then ()
   else
@@ -585,7 +586,7 @@ let verify_def global_env type_env instance_env =
     match !eqlist with
     | [] -> failwith "Where definition ?"
     | h :: t -> (
-        let col = no_dups false 0 (sand h) in
+        let col = no_dups false 0 (List.map snd (sand h)) in
         if col = -1 then (
           if List.length !eqlist > 1 then failwith "Double définition"
           else curr_defined := "";
@@ -597,7 +598,10 @@ let verify_def global_env type_env instance_env =
                 not
                   (exhaustive_list empty type_env instance_env
                      [ List.nth tlist col ]
-                     (List.map (fun x -> [ x ]) (List.map (aux col) !eqlist)))
+                     (List.map (fun x -> [ x ]) (List.map (
+                      fun defn ->
+                      aux col (fast defn, List.map snd (sand defn), (trad defn))
+                      ) !eqlist)))
               then failwith "Pattern Non Exhaustif"
               else curr_defined := "";
               eqlist := []
@@ -607,7 +611,7 @@ let rec typ_fdecl global_env type_env instance_env (fdecl:fdecl) =
   if Smaps.mem fdecl.name !function_env then failwith "Fonction déjà Définie"
   else if not (no_same_name fdecl.variables) then failwith "Noms de Variables en Doubles"
   else let var_type_env = List.fold_left (fun t_env s -> Smaps.add s (TAlias s, 0) t_env) Smaps.empty fdecl.variables in
-  let type_env = Smaps.union (fun _ _ _ -> "Deux Patterns ont Même Nom") type_env var_type_env in 
+  let type_env = Smaps.union (fun _ _ _ -> failwith "Deux Patterns ont Même Nom") type_env var_type_env in 
     let instance_env = List.fold_left (fun inst_env n -> Smaps.add (fst n) ((List.map (ast_atype global_env type_env inst_env) (snd n), []) :: (smaps_find (fst n) inst_env)) inst_env) instance_env fdecl.ntypes in 
     curr_defined := fdecl.name;
     TArrow(List.map (ast_type global_env type_env instance_env) fdecl.types, ast_type global_env type_env instance_env fdecl.out_type), var_type_env, instance_env
@@ -675,18 +679,19 @@ and add_ntype_list type_env = function
 and typ_instance global_env type_env instance_env dinst =
   match fst dinst with
     | Intype(n) -> typ_instance global_env type_env instance_env (Iarrow([], n), snd dinst) 
-    | Iarrow(nl, n) -> (let cons_id = fst n in 
+    | Iarrow(nl, n) -> (
+      let cons_id = fst n in 
       let sl, class_functions, fl = smaps_find cons_id !class_env in
       let rec add_instance instance_env type_env = function
         | [] -> instance_env
         | n :: q -> Smaps.add (fst n) 
         ((List.map (ast_atype global_env type_env instance_env) (snd n), []) :: (smaps_find (fst n) instance_env)) 
-        (add_instance instance_env q) in
+        (add_instance instance_env type_env q) in
       let type_env = add_ntype_list type_env nl in
       let type_env = add_atype type_env (snd n) in
       let instance_env = add_instance instance_env type_env nl in 
       let aux tl1 tl2 = if unify tl1 tl2 then failwith "Instances Unifiables" in 
-      List.iter (aux (List.map (ast_atype global_env type_env instance_env) (snd n))) (List.map fst (smaps_find (fst n) !global_instances_env));
+      List.iter (aux (List.map (ast_atype global_env type_env instance_env) (snd n))) (List.map fst (smaps_find (fst n) !global_env_instances));
       let rec aux sl tl = match sl, tl with
         | [], [] -> Smaps.empty
         | s::t1, t::t2 -> Smaps.add s t (aux t1 t2)
@@ -695,7 +700,8 @@ and typ_instance global_env type_env instance_env dinst =
       let sub_table = aux sl (List.map (ast_atype global_env type_env instance_env) (snd n)) in 
       let sub = function
         | TAlias s -> smaps_find s sub_table
-        | _ -> t in 
+        | t -> t
+      in 
       List.iter (fun (defn:defn) -> (match frst (smaps_find (fast defn) !function_env) with 
         | TArrow(tlist, t) -> typ_defn global_env type_env instance_env false defn (List.map sub tlist) (sub t)
         | _ -> failwith "Ma qué pasta")) fl; 
@@ -703,37 +709,42 @@ and typ_instance global_env type_env instance_env dinst =
         | Pident s when is_lower s -> true
         | Ppattern (Parg(l, p)) -> is_ident p
         | _ -> false
-    in 
-    let rec filter s = function
-      | [] -> []
-      | defn::q when (fst defn) = s -> defn::(aux s q)
-      | defn :: q -> aux s q
-    in
-    let rec col found i = function 
-      | [] -> -1
-      | (l, x) :: q when is_ident x -> col found (i + 1) q
-      | x :: q when found -> failwith "Plusieurs Variables Filtrées" 
-      | x :: q -> let _ = col found (i + 1) q in i 
-  in 
-  let filter_col col (defn : defn) =
-    Parg("pareil qu'avant je sais pas faire", (List.nth (sand defn) col)) 
-  in
-  let check_exhaust s = function
-    | TArrow(tl, _) -> let l = filter s (snd dinst) in (match l with 
-      | [] -> failwith "Définition Manquante"
-      | x :: q -> let c = col false 0 (sand x) in if c = -1 then () else
-        if not (exhaustive_list global_env type_env instance_env [sub (List.nth tl c)] (List.map (fun w -> [filter_col c x]) l)) then failwith "Pattern Matching non Exhaustif" else ())
-    | _ -> failwith "Ma qué Pasta"
       in 
-  let rec requires = function
-      | [] -> []
-      | n :: q ->
-        (fst n, List.map (ast_atype global_env type_env instance_env) (snd n))::(requires q)
+      let rec filter s = function
+        | [] -> []
+        | defn::q when (fst defn) = s -> defn::(aux s q)
+        | defn :: q -> aux s q
+      in
+      let rec col found i = function 
+        | [] -> -1
+        | (l, x) :: q when is_ident x -> col found (i + 1) q
+        | x :: q when found -> failwith "Plusieurs Variables Filtrées" 
+        | x :: q -> let _ = col found (i + 1) q in i 
       in 
-      let requirements = requires nl in
-      Smaps.iter check_exhaust dinst class_functions;
-      global_env_instances := Smaps.add (fst n) ((List.map (ast_atype global_env type_env instance_env) (snd n), requirements)::(smaps_find (fst n) !global_env_instances)) !global_env_instances   
-    )
+      let filter_col col (defn : defn) =
+        List.nth (sand defn) col
+      in
+      let check_exhaust s = function
+      | TArrow(tl, _) -> let l = filter s (snd dinst) in 
+        (
+          match l with 
+          | [] -> failwith "Définition Manquante"
+          | x :: q -> let c = col false 0 (sand (snd x)) in if c = -1 then () else
+            if not (exhaustive_list global_env type_env instance_env [sub (List.nth tl c)] (List.map (fun w -> [Parg (filter_col c x)]) l)) 
+              then failwith "Pattern Matching non Exhaustif" 
+            else ()
+        )
+        | _ -> failwith "Ma qué Pasta"
+        in 
+        let rec requires = function
+        | [] -> []
+        | n :: q ->
+          (fst n, List.map (ast_atype global_env type_env instance_env) (snd n))::(requires q)
+        in 
+        let requirements = requires nl in
+        Smaps.iter (fun f -> check_exhaust f) dinst class_functions;
+        global_env_instances := Smaps.add (fst n) ((List.map (ast_atype global_env type_env instance_env) (snd n), requirements)::(smaps_find (fst n) !global_env_instances)) !global_env_instances   
+        )
 
 and typ_file f = 
   let global_env = add false "unit" TUnit empty in
