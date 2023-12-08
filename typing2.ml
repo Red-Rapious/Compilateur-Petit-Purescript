@@ -516,12 +516,12 @@ and exhaustive_list global_env type_env instance_env tlist pllist =
     | _ -> false
   in
   let rec get_list = function
-  | [] -> []
-  | (Pconsarg(_, x) :: _)::t -> List.map (fun t -> Parg(t)) x :: get_list t
-  | (Parg(l, Pident s) :: _) :: t when not (is_lower s) -> get_list t
-  | (Parg(l, Ppattern p) :: t1) :: t2 -> get_list ((p :: t1) :: t2)
-  | _ -> failwith "Erreur de Syntaxe détectée au typage ???"
-in
+    | [] -> []
+    | (Pconsarg (_, x) :: _) :: t -> List.map (fun t -> Parg t) x :: get_list t
+    | (Parg (l, Pident s) :: _) :: t when not (is_lower s) -> get_list t
+    | (Parg (l, Ppattern p) :: t1) :: t2 -> get_list ((p :: t1) :: t2)
+    | _ -> failwith "Erreur de Syntaxe détectée au typage ???"
+  in
   let rec is_id_in_list f i = function
     | [] -> []
     | x :: t when f (List.nth x i) -> x :: is_id_in_list f i t
@@ -552,46 +552,52 @@ in
 
 let sand (a, b, c) = b
 
-let verify_def global_env type_env instance_env = 
+let verify_def global_env type_env instance_env =
   let rec is_ident = function
     | Pident s -> true
-    | Ppattern(Parg (l,p)) -> is_ident p
+    | Ppattern (Parg (l, p)) -> is_ident p
     | _ -> false
-in 
-let rec no_dups found i = function
-  | [] -> -1
-  | h :: t when is_ident h -> no_dups found (i + 1) t
-  | h :: t when found -> failwith "Filtrage Multiples dans une Fonction"
-  | h :: t -> let _ = no_dups true (i + 1) t in i
-in 
-let rec aux col definition = 
-  Parg ("là je sais pas comment faire", List.nth (sand definition) col) in
-if !curr_defined = "" then ()
-else 
-  let type_env = 
-    Smaps.union (fun _ _ _ -> failwith "Noms de Variables non Tous Différents") type_env (scnd (smaps_find !curr_defined !function_env))
   in
-  eqlist := List.rev !eqlist;
-  match !eqlist with
+  let rec no_dups found i = function
+    | [] -> -1
+    | h :: t when is_ident h -> no_dups found (i + 1) t
+    | h :: t when found -> failwith "Filtrage Multiples dans une Fonction"
+    | h :: t ->
+        let _ = no_dups true (i + 1) t in
+        i
+  in
+  let rec aux col definition =
+    Parg ("là je sais pas comment faire", List.nth (sand definition) col)
+  in
+  if !curr_defined = "" then ()
+  else
+    let type_env =
+      Smaps.union
+        (fun _ _ _ -> failwith "Noms de Variables non Tous Différents")
+        type_env
+        (scnd (smaps_find !curr_defined !function_env))
+    in
+    eqlist := List.rev !eqlist;
+    match !eqlist with
     | [] -> failwith "Where definition ?"
     | h :: t -> (
-      let col = no_dups false 0 (sand h) in
-      if col = -1 then (
-        if List.length !eqlist > 1 then 
-          failwith "Double définition"
-    else curr_defined := ""; eqlist := []
-      )
-  else
-    match frst (smaps_find !curr_defined !function_env) with
-      | TArrow(tlist, t) ->
-        if not (exhaustive_list empty type_env instance_env [List.nth tlist col] (List.map (fun x -> [x]) (List.map (aux col) !eqlist)))
-          then failwith "Pattern Non Exhaustif"
-      else curr_defined := ""; eqlist := []
-      | _ -> failwith "Impossible"
-    )
-    
-
-
+        let col = no_dups false 0 (sand h) in
+        if col = -1 then (
+          if List.length !eqlist > 1 then failwith "Double définition"
+          else curr_defined := "";
+          eqlist := [])
+        else
+          match frst (smaps_find !curr_defined !function_env) with
+          | TArrow (tlist, t) ->
+              if
+                not
+                  (exhaustive_list empty type_env instance_env
+                     [ List.nth tlist col ]
+                     (List.map (fun x -> [ x ]) (List.map (aux col) !eqlist)))
+              then failwith "Pattern Non Exhaustif"
+              else curr_defined := "";
+              eqlist := []
+          | _ -> failwith "Impossible")
 
 (*and typ_b
   ranch global_env type_env instance_env    type_env instance_env    (p, e) = function

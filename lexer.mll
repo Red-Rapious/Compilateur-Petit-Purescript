@@ -52,7 +52,7 @@ rule token = parse
   | '*'                   { TIMES }
   | "/"                   { DIV }
   | "=="                  { CMP Beq }
-  | "!="                  { CMP Bneq }
+  | "/="                  { CMP Bneq }
   | "<"                   { CMP Blt }
   | "<="                  { CMP Ble }
   | ">"                   { CMP Bgt }
