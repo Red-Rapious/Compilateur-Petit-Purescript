@@ -31,8 +31,19 @@ let double_localisation (pstart, pend) =
   and l2 = pend.pos_lnum in
   let cstart = pstart.pos_cnum - pend.pos_bol 
   and cend = pend.pos_cnum - pend.pos_bol in
-  if l1 = l2 then
-    eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l1 cstart cend
+  if l1 = l2 then begin
+    eprintf "File \"%s\", line %d, characters %d-%d:\n" !ifile l1 cstart cend ;
+
+    (* On ouvre le fichier et on lit la ligne correspondante *)
+    let file = open_in !ifile in 
+    for _=0 to l1-2 do 
+      ignore (input_line file)
+    done ;
+    (* on affiche la ligne avec son numéro *)
+    eprintf "%d | %s\n" l1 (input_line file) ;
+    (* on souligne la localisation de l'erreur *)
+    eprintf "%s%s\n" (String.make (cstart+3+(String.length (string_of_int l1))) ' ') (String.make (cend-cstart) '^') ;
+  end
   else 
     eprintf "File \"%s\", line %d-%d, characters %d-%d:\n" !ifile l1 l2 cstart cend
 
