@@ -49,6 +49,8 @@ exception Typing_error of loc * string
 let typing_error loc s = raise (Typing_error (loc, s))
 
 exception Empty_pattern_matching of loc
+exception Non_exhaustive_pattern_matching of loc
+exception Too_many_arguments of loc
 exception Unknown_ident of loc * Ast.ident
 
 let rec occur v t =
@@ -201,8 +203,7 @@ let rec typ_exp global_env type_env
       | TInt -> TInt
       | _ ->
           typing_error (fst e)
-            "mauvais opérande pour l'opérateur unaire '-' : le type attendu \
-             est TInt")
+            "mauvais opérande pour l'opérateur unaire '-' : le type attendu est TInt")
   | Eif (e1, e2, e3) -> (
       match typ_exp global_env type_env instance_env global e1 with
       | TBool ->
@@ -213,32 +214,27 @@ let rec typ_exp global_env type_env
             typing_error (fst e3) "les deux branches doivent être de même type"
       | _ ->
           typing_error (fst e1)
-            "mauvais type de l'expression de condition : le type attendu est \
-             Bool")
+            "mauvais type de l'expression de condition : le type attendu est Bool")
   | Ebinop (e1, op, e2) -> (
       let s1 = typ_exp global_env type_env instance_env global e1 in
       let s2 = typ_exp global_env type_env instance_env global e2 in
       let binop_string = Pretty.print_binop op in
       if s1 <> s2 then
         typing_error (fst e2)
-          ("mauvais opérande pour '" ^ binop_string
-         ^ "' : les deux types doivent être identiques");
+          ("mauvais opérande pour '" ^ binop_string ^ "' : les deux types doivent être identiques");
       match op with
       | Beq | Bneq -> (
           match s1 with
           | TInt | TBool | TStr -> TBool
           | _ ->
               typing_error (fst e1)
-                ("mauvais opérande pour l'opérateur '" ^ binop_string
-               ^ "' : les expressions comparées doivent être de type TInt, \
-                  String ou Bool"))
+                ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions comparées doivent être de type TInt, String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
           match s1 with
           | TInt -> TBool
           | _ ->
               typing_error (fst e1)
-                ("mauvais opérande pour l'opérateur '" ^ binop_string
-               ^ "' : les expressions comparées doivent être de type TInt"))
+                ("mauvais opérande pour l'opérateur '" ^ binop_string ^ "' : les expressions comparées doivent être de type TInt"))
       | Bsub | Badd | Bmul | Bdiv -> (
           match s1 with
           | TInt -> TInt
@@ -275,23 +271,20 @@ let rec typ_exp global_env type_env
   | Ecase (e, bl) -> (
       let t = typ_exp global_env type_env instance_env global e in
       match bl with
-      | [] -> failwith "Empty Pattern Matching Bro"
+      | [] -> raise (Empty_pattern_matching (fst e))
       | b :: tail ->
           let tau = typ_branch global_env type_env instance_env t global b in
           List.iter
             (fun x ->
-              if
-                not
-                  (typ_eq tau
-                     (typ_branch global_env type_env instance_env t global x))
-              then failwith "Mauvais Type de Pattern"
+              if not (typ_eq tau (typ_branch global_env type_env instance_env t global x))
+              then raise (Typing_error ((fst e), "mauvais type"))
               else ())
             tail;
           if
             not
               (exhaustive_list global_env type_env instance_env [ t ]
                  (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
-          then failwith "Pattern Non Exhaustif"
+          then raise (Non_exhaustive_pattern_matching (fst e))
           else tau)
   | Elet (bl, e) ->
       let rec aux global_env type_env instance_env l =
@@ -313,9 +306,8 @@ let rec typ_exp global_env type_env
           | h1 :: t1, h2 :: t2 ->
               if typ_eq (typ_atom global_env type_env instance_env global h1) h2
               then aux t1 t2
-              else failwith "Mauvais Types dans le constructeur"
-                (*TODO : AJouter localisation*)
-          | _ -> failwith "Liste d'argument d'une longueur insuffisante"
+              else (typing_error loc "mauvais types dans le constructeur")
+          | _ -> typing_error loc "liste d'arguments de longueur insuffisante"
         in
         aux al constr.ctlist;
         constr.ctyp)
@@ -327,7 +319,7 @@ let rec typ_exp global_env type_env
               instance_env
               (frth (Smaps.find id !function_env))
           in
-          if Smaps.mem id global_env.bindings then failwith "Pas une fonction"
+          if Smaps.mem id global_env.bindings then typing_error loc "ceci n'est pas une fonction"
           else (
             (match thrd (Smaps.find id !function_env) with
             | None -> TBool
@@ -360,7 +352,7 @@ let rec typ_exp global_env type_env
                           if
                             Smaps.mem s !vars
                             && not (typ_eq tau (smaps_find s !vars))
-                          then failwith "Types Différents"
+                          then typing_error (fst a) "les types sont différents"
                           else vars := Smaps.add s tau !vars;
                           aux t1 t2)
                   | _ ->
@@ -368,13 +360,13 @@ let rec typ_exp global_env type_env
                         not
                           (typ_eq t
                              (typ_atom global_env type_env instance_env global a))
-                      then failwith "Mauvais Type d'Argument"
+                      then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
-              | _ -> failwith "Trop d'arguments"
+              | _ -> raise (Too_many_arguments loc)
             in
             aux tlist al;
             substitute !vars t)
-        with Not_found -> failwith "Fonction Non Définie")
+        with Not_found -> raise (Unknown_ident (loc, id)))
 
 and compat_instances instance_env cident id instances tlist global =
   let slist, class_functions, functions = smaps_find cident !class_env in
@@ -388,7 +380,7 @@ and compat_instances instance_env cident id instances tlist global =
     | [], [] -> env
     | TAlias s :: t1, h :: t2 -> Smaps.add s h (consmap env t1 t2)
     | t1 :: q1, t2 :: q2 when typ_eq t1 t2 -> consmap env q1 q2
-    | _ -> failwith "Appel incompatible avec sa définition"
+    | _ -> typing_error (failwith "trouver la localisation des instances") "appel incompatible avec la définition"
   in
   let env = consmap Smaps.empty ftlist tlist in
   let variables = List.map (fun s -> smaps_find s env) slist in
@@ -411,7 +403,7 @@ and compat_instances instance_env cident id instances tlist global =
         && all_basic_instinct instance_env q
   in
   let rec find_valid tlist = function
-    | [] -> failwith "Instances Incompatibles"
+    | [] -> typing_error (failwith "implémenter la localisation") "instances incompatibles"
     | tl :: q
       when (((not global) && valid (fst tl) tlist)
            || (global && unify (fst tl) tlist))
@@ -450,7 +442,7 @@ and typ_pattern global_env type_env instance_env t = function
   | Parg p -> typ_patarg global_env type_env instance_env t p
   | Pconsarg (id, plist) ->
       let cons = smaps_find id !cons_env in
-      if not (typ_eq cons.ctyp t) then failwith "Mauvais type de constructeur"
+      if not (typ_eq cons.ctyp t) then typing_error (failwith "localiser") "le constructeur est de mauvais type"
       else
         let rec aux env plist tlist =
           match (plist, tlist) with
@@ -465,7 +457,7 @@ and typ_pattern global_env type_env instance_env t = function
                     env.bindings a.bindings;
                 fvars = Vset.union a.fvars env.fvars;
               }
-          | _ -> failwith "Mauvaise Arité pour le Constructeur"
+          | _ -> typing_error (failwith "localiser") "mauvaise arité pour le constructeur"
         in
         aux global_env plist cons.ctlist
 
@@ -474,11 +466,11 @@ and typ_patarg global_env type_env instance_env t = function
       let ctau =
         match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr
       in
-      if not (typ_eq ctau t) then failwith "Mauvais Type" else global_env
+      if not (typ_eq ctau t) then typing_error l "mauvais type d'argument de pattern" else global_env
   | l, Pident s when is_lower s -> add false s t global_env
   | l, Pident s ->
       if not (typ_eq (smaps_find s !cons_env).ctyp t) then
-        failwith "Mauvais Type de Constructeur"
+        typing_error l "mauvais type de constructeur"
       else global_env
   | l, Ppattern p -> typ_pattern global_env type_env instance_env t p
 
@@ -523,7 +515,7 @@ and exhaustive_list global_env type_env instance_env tlist pllist =
     | (Pconsarg (_, x) :: _) :: t -> List.map (fun t -> Parg t) x :: get_list t
     | (Parg (l, Pident s) :: _) :: t when not (is_lower s) -> get_list t
     | (Parg (l, Ppattern p) :: t1) :: t2 -> get_list ((p :: t1) :: t2)
-    | _ -> failwith "Erreur de Syntaxe détectée au typage ???"
+    | _ -> failwith "une erreur de syntaxe a été détéctée lors du typage"
   in
   let rec is_id_in_list f i = function
     | [] -> []
@@ -572,7 +564,7 @@ let verify_def global_env type_env instance_env =
         i
   in
   let rec aux col definition =
-    Parg (failwith "là je sais pas comment faire, insère la localisation siouplé", List.nth (sand definition) col)
+    List.nth (sand definition) col
   in
   if !curr_defined = "" then ()
   else
@@ -602,7 +594,7 @@ let verify_def global_env type_env instance_env =
                       fun defn ->
                       aux col (fast defn, List.map snd (sand defn), (trad defn))
                       ) !eqlist)))
-              then failwith "Pattern Non Exhaustif"
+              then raise (Non_exhaustive_pattern_matching (failwith "LOCALISER"))
               else curr_defined := "";
               eqlist := []
           | _ -> failwith "Impossible")
@@ -690,61 +682,70 @@ and typ_instance global_env type_env instance_env dinst =
       let type_env = add_ntype_list type_env nl in
       let type_env = add_atype type_env (snd n) in
       let instance_env = add_instance instance_env type_env nl in 
-      let aux tl1 tl2 = if unify tl1 tl2 then failwith "Instances Unifiables" in 
-      List.iter (aux (List.map (ast_atype global_env type_env instance_env) (snd n))) (List.map fst (smaps_find (fst n) !global_env_instances));
-      let rec aux sl tl = match sl, tl with
-        | [], [] -> Smaps.empty
-        | s::t1, t::t2 -> Smaps.add s t (aux t1 t2)
-        | _ -> failwith "Mauvais Nombre de Types"
-      in
-      let sub_table = aux sl (List.map (ast_atype global_env type_env instance_env) (snd n)) in 
-      let sub = function
-        | TAlias s -> smaps_find s sub_table
-        | t -> t
-      in 
-      List.iter (fun (defn:defn) -> (match frst (smaps_find (fast defn) !function_env) with 
-        | TArrow(tlist, t) -> typ_defn global_env type_env instance_env false defn (List.map sub tlist) (sub t)
-        | _ -> failwith "Ma qué pasta")) fl; 
-      let rec is_ident = function
-        | Pident s when is_lower s -> true
-        | Ppattern (Parg(l, p)) -> is_ident p
-        | _ -> false
-      in 
-      let rec filter s = function
-        | [] -> []
-        | defn::q when (fst defn) = s -> defn::(aux s q)
-        | defn :: q -> aux s q
-      in
-      let rec col found i = function 
-        | [] -> -1
-        | (l, x) :: q when is_ident x -> col found (i + 1) q
-        | x :: q when found -> failwith "Plusieurs Variables Filtrées" 
-        | x :: q -> let _ = col found (i + 1) q in i 
-      in 
-      let filter_col col (defn : defn) =
-        List.nth (sand defn) col
-      in
-      let check_exhaust s = function
-      | TArrow(tl, _) -> let l = filter s (snd dinst) in 
-        (
-          match l with 
-          | [] -> failwith "Définition Manquante"
-          | x :: q -> let c = col false 0 (sand (snd x)) in if c = -1 then () else
-            if not (exhaustive_list global_env type_env instance_env [sub (List.nth tl c)] (List.map (fun w -> [Parg (filter_col c x)]) l)) 
-              then failwith "Pattern Matching non Exhaustif" 
-            else ()
-        )
+      let aux tl1 tl2 = 
+        if unify tl1 tl2 then failwith "Instances Unifiables" in 
+        List.iter (aux (List.map (ast_atype global_env type_env instance_env) (snd n))) (List.map fst (smaps_find (fst n) !global_env_instances));
+        
+        (* à partir d'une liste d'ident et d'une liste de 'a, renvoie une Smap contenant les bindings (ident, 'a) *)
+        let rec aux sl tl = 
+          match sl, tl with
+          | [], [] -> Smaps.empty
+          | s::t1, t::t2 -> Smaps.add s t (aux t1 t2)
+          | _ -> failwith "Mauvais Nombre de Types"
+        in
+
+        let sub_table = aux sl (List.map (ast_atype global_env type_env instance_env) (snd n)) in 
+        let sub = function
+          | TAlias s -> smaps_find s sub_table
+          | t -> t
+        in 
+        List.iter (fun (defn:defn) -> (match frst (smaps_find (fast defn) !function_env) with 
+          | TArrow(tlist, t) -> typ_defn global_env type_env instance_env false defn (List.map sub tlist) (sub t)
+          | _ -> failwith "Ma qué pasta")) fl; 
+        let rec is_ident = function
+          | Pident s when is_lower s -> true
+          | Ppattern (Parg(l, p)) -> is_ident p
+          | _ -> false
+        in 
+
+        (* NE SERAIT-CE PAS JUSTE LA FONCTION FILTER DE LIST ? *)
+        let rec filter s = function
+          | [] -> []
+          | defn::q when (fst defn) = s -> defn::(filter s q)
+          | defn :: q -> q
+        in
+        let rec col found i = function 
+          | [] -> -1
+          | (l, x) :: q when is_ident x -> col found (i + 1) q
+          | x :: q when found -> failwith "Plusieurs Variables Filtrées" 
+          | x :: q -> let _ = col found (i + 1) q in i 
+        in 
+        (*let filter_col col (defn : defn) =
+          List.nth (sand defn) col
+        in*)
+        let check_exhaust s = function
+        | TArrow(tl, _) -> 
+          let l = filter s (snd dinst) in 
+          (match l with 
+            | [] -> failwith "Définition Manquante"
+            | x :: q -> let c = col false 0 (sand (snd x)) in 
+              if c = -1 then () else
+              if not (exhaustive_list global_env type_env instance_env [sub (List.nth tl c)] (List.map (fun w -> [Parg (List.nth (sand (snd x)) c)]) l)) 
+                then failwith "Pattern Matching non Exhaustif" 
+              else ())
         | _ -> failwith "Ma qué Pasta"
         in 
+
         let rec requires = function
         | [] -> []
         | n :: q ->
           (fst n, List.map (ast_atype global_env type_env instance_env) (snd n))::(requires q)
         in 
+
         let requirements = requires nl in
-        Smaps.iter (fun f -> check_exhaust f) dinst class_functions;
+        Smaps.iter (fun id t -> check_exhaust [id] t) class_functions; (* JE SUIS VRAIMENT PAS SÛR QUE CE SOIT [id] *)
         global_env_instances := Smaps.add (fst n) ((List.map (ast_atype global_env type_env instance_env) (snd n), requirements)::(smaps_find (fst n) !global_env_instances)) !global_env_instances   
-        )
+      )
 
 and typ_file f = 
   let global_env = add false "unit" TUnit empty in

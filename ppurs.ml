@@ -121,6 +121,16 @@ let () =
       eprintf "Identifiant inconnu : %s@." id ;
       exit 1
 
+    (*| Typing.Non_exhaustive_pattern_matching loc ->
+      localisation loc ;
+      eprintf "Ce pattern matching n'est pas exhaustif.@." id ;
+      exit 1
+
+    | Typing.Too_many_arguments loc ->
+      localisation loc ;
+      eprintf "Trop d'arguments on été passés à la fonction.@." id ;
+      exit 1*)
+
     (* Erreur de OCaml (ou failwith) *)
     | e ->
       eprintf "Erreur interne du compilateur : %s\n@." (Printexc.to_string e);
