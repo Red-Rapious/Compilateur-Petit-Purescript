@@ -1,6 +1,8 @@
 open Ast
 open Pretty
 
+(*Cette Partie du Code a été écrite par Matthieu Boyer, en s'étant librement inspiré de l'architecture d'environnement du code de Nathan Boyer*)
+
 let rec typ_eq t1 t2 =
   match (t1, t2) with
   | TUnit, TUnit | TStr, TStr | TInt, TInt | TBool, TBool -> true
@@ -168,6 +170,8 @@ let function_env =
 
 let cons_env = ref Smaps.empty
 
+let (global_env_instances : (typ list*(ident*(typ list))list ) list Smaps.t ref) = ref (Smaps.add "Show" ([([TInt],[]);([TBool],[])]) Smaps.empty)
+
 let class_env =
   ref
     (Smaps.add "Show"
@@ -177,7 +181,7 @@ let class_env =
        Smaps.empty)
 
 let curr_defined = ref ""
-let eqlist = ref []
+let (eqlist:defn list ref) = ref []
 
 let rec substitute set t =
   match head t with
@@ -406,9 +410,7 @@ and compat_instances instance_env cident id instances tlist global =
   in
   let rec find_valid tlist = function
     | [] ->
-        failwith
-          ("Pas d'instance compatible pour la classe " ^ cident
-         ^ " en appelant " ^ id)
+        failwith "Instances Incompatibles"
     | tl :: q
       when (((not global) && valid (fst tl) tlist)
            || (global && unify (fst tl) tlist))
@@ -416,7 +418,7 @@ and compat_instances instance_env cident id instances tlist global =
         ()
     | tl :: q -> find_valid tlist q
   in
-  find_valid tlist instances
+  find_valid instances variables
 
 and typ_atom global_env type_env instance_env global (l, a) =
   match a with
@@ -550,7 +552,9 @@ and exhaustive_list global_env type_env instance_env tlist pllist =
   in
   List.length tlist = 0 || aux 0 pllist
 
+let fast (a, b, c) = a
 let sand (a, b, c) = b
+let trad (a, b, c) = c
 
 let verify_def global_env type_env instance_env =
   let rec is_ident = function
@@ -599,6 +603,158 @@ let verify_def global_env type_env instance_env =
               eqlist := []
           | _ -> failwith "Impossible")
 
+let rec typ_fdecl global_env type_env instance_env (fdecl:fdecl) =
+  if Smaps.mem fdecl.name !function_env then failwith "Fonction déjà Définie"
+  else if not (no_same_name fdecl.variables) then failwith "Noms de Variables en Doubles"
+  else let var_type_env = List.fold_left (fun t_env s -> Smaps.add s (TAlias s, 0) t_env) Smaps.empty fdecl.variables in
+  let type_env = Smaps.union (fun _ _ _ -> "Deux Patterns ont Même Nom") type_env var_type_env in 
+    let instance_env = List.fold_left (fun inst_env n -> Smaps.add (fst n) ((List.map (ast_atype global_env type_env inst_env) (snd n), []) :: (smaps_find (fst n) inst_env)) inst_env) instance_env fdecl.ntypes in 
+    curr_defined := fdecl.name;
+    TArrow(List.map (ast_type global_env type_env instance_env) fdecl.types, ast_type global_env type_env instance_env fdecl.out_type), var_type_env, instance_env
+
+and typ_defn global_env type_env instance_env deflist (defn:defn) tlist t = 
+  if deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> (fast defn) then failwith "Double Définition"
+  else
+    (if deflist then eqlist := defn::!eqlist;
+    let (plist:loc_patarg list) = (sand defn) in
+    let global_env = List.fold_right2 (fun pt t envi -> 
+        let a = typ_patarg empty type_env instance_env t pt in 
+        {bindings = Smaps.union (fun _ _ _ -> failwith "Noms en doubles") a.bindings envi.bindings; fvars = Vset.union a.fvars envi.fvars}
+      ) plist tlist global_env in
+    let type_env = if deflist then (Smaps.union (fun _ _ _ -> failwith "Deux Variables avec le Même Nom Nom Nom") type_env (scnd (smaps_find (fast defn) !function_env))) else type_env in
+    if not (typ_eq (typ_exp global_env type_env instance_env deflist (trad defn)) t) then failwith "Mauvais Type de Retour" else ()
+    )
+
+and typ_data global_env type_env instance_env (data:data) =
+  if Smaps.mem data.name type_env then failwith "Type déjà défini" else
+    if not (no_same_name data.params) then failwith "Deux Variables de Même Nom"
+    else
+      let tau = TCons(data.name, []) in
+      let type_env = Smaps.add data.name (tau, List.length data.params) type_env in
+      let var_type_env = List.fold_left (fun env id -> Smaps.add id (TAlias id, 0) env) Smaps.empty data.params in 
+      let real_type_env = Smaps.union (fun _ _ _ -> failwith "Variables de Même Nom") var_type_env type_env in
+      let rec add_cons = function
+        | [] -> ()
+        | (i, al) :: t -> if Smaps.mem i !cons_env then failwith "Constructeur déjà Défini"
+        else cons_env := Smaps.add i {cident = i; ctlist = List.map (ast_atype global_env real_type_env instance_env) al; ctyp = tau; cenvvartyps = var_type_env} !cons_env; add_cons t in
+      add_cons data.types
+
+and typ_class global_env type_env instance_env (clas:clas) =
+  if Smaps.mem clas.name !class_env then failwith "Classe déjà définie"
+  else
+    let class_functions = ref Smaps.empty in 
+    List.iter 
+    (fun fdecl -> let tau, var_env, inst_env = typ_fdecl global_env type_env instance_env fdecl in
+    curr_defined := "";
+    eqlist := [];
+    class_functions := Smaps.add fdecl.name tau !class_functions;
+    function_env := Smaps.add fdecl.name (tau, var_env, Some clas.name, inst_env) !function_env;
+    )
+    (List.map (fun {name = name; variables = vars; ntypes = nl; types = tl; out_type = t} -> 
+      {name = name; variables = clas.params; ntypes = nl; types = tl; out_type = t}
+      ) clas.decls)
+
+
+and add_atype type_env = function
+  | (Tident s) :: q when is_lower s -> Smaps.add s (TAlias(s), 0) (add_atype type_env q)
+  | (Tident _) :: q -> add_atype type_env q
+  | (Ttype t) :: q -> Smaps.union (fun _ a _ -> Some a) (add_atype type_env q) (add_ast_type type_env t)
+  | [] -> type_env
+
+and add_ast_type type_env = function
+  | Tatype a -> add_atype type_env [a]
+  | Tntype n -> add_ntype type_env n
+
+and add_ntype type_env n = add_atype type_env (snd n)
+
+and add_ntype_list type_env = function
+  | [] -> type_env
+  | n :: q -> Smaps.union (fun _ a _ -> Some a) (add_ntype type_env n) (add_ntype_list Smaps.empty q)
+
+
+and typ_instance global_env type_env instance_env dinst =
+  match fst dinst with
+    | Intype(n) -> typ_instance global_env type_env instance_env (Iarrow([], n), snd dinst) 
+    | Iarrow(nl, n) -> (let cons_id = fst n in 
+      let sl, class_functions, fl = smaps_find cons_id !class_env in
+      let rec add_instance instance_env type_env = function
+        | [] -> instance_env
+        | n :: q -> Smaps.add (fst n) 
+        ((List.map (ast_atype global_env type_env instance_env) (snd n), []) :: (smaps_find (fst n) instance_env)) 
+        (add_instance instance_env q) in
+      let type_env = add_ntype_list type_env nl in
+      let type_env = add_atype type_env (snd n) in
+      let instance_env = add_instance instance_env type_env nl in 
+      let aux tl1 tl2 = if unify tl1 tl2 then failwith "Instances Unifiables" in 
+      List.iter (aux (List.map (ast_atype global_env type_env instance_env) (snd n))) (List.map fst (smaps_find (fst n) !global_instances_env));
+      let rec aux sl tl = match sl, tl with
+        | [], [] -> Smaps.empty
+        | s::t1, t::t2 -> Smaps.add s t (aux t1 t2)
+        | _ -> failwith "Mauvais Nombre de Types"
+      in
+      let sub_table = aux sl (List.map (ast_atype global_env type_env instance_env) (snd n)) in 
+      let sub = function
+        | TAlias s -> smaps_find s sub_table
+        | _ -> t in 
+      List.iter (fun (defn:defn) -> (match frst (smaps_find (fast defn) !function_env) with 
+        | TArrow(tlist, t) -> typ_defn global_env type_env instance_env false defn (List.map sub tlist) (sub t)
+        | _ -> failwith "Ma qué pasta")) fl; 
+      let rec is_ident = function
+        | Pident s when is_lower s -> true
+        | Ppattern (Parg(l, p)) -> is_ident p
+        | _ -> false
+    in 
+    let rec filter s = function
+      | [] -> []
+      | defn::q when (fst defn) = s -> defn::(aux s q)
+      | defn :: q -> aux s q
+    in
+    let rec col found i = function 
+      | [] -> -1
+      | (l, x) :: q when is_ident x -> col found (i + 1) q
+      | x :: q when found -> failwith "Plusieurs Variables Filtrées" 
+      | x :: q -> let _ = col found (i + 1) q in i 
+  in 
+  let filter_col col (defn : defn) =
+    Parg("pareil qu'avant je sais pas faire", (List.nth (sand defn) col)) 
+  in
+  let check_exhaust s = function
+    | TArrow(tl, _) -> let l = filter s (snd dinst) in (match l with 
+      | [] -> failwith "Définition Manquante"
+      | x :: q -> let c = col false 0 (sand x) in if c = -1 then () else
+        if not (exhaustive_list global_env type_env instance_env [sub (List.nth tl c)] (List.map (fun w -> [filter_col c x]) l)) then failwith "Pattern Matching non Exhaustif" else ())
+    | _ -> failwith "Ma qué Pasta"
+      in 
+  let rec requires = function
+      | [] -> []
+      | n :: q ->
+        (fst n, List.map (ast_atype global_env type_env instance_env) (snd n))::(requires q)
+      in 
+      let requirements = requires nl in
+      Smaps.iter check_exhaust dinst class_functions;
+      global_env_instances := Smaps.add (fst n) ((List.map (ast_atype global_env type_env instance_env) (snd n), requirements)::(smaps_find (fst n) !global_env_instances)) !global_env_instances   
+    )
+
+and typ_file f = 
+  let global_env = add false "unit" TUnit empty in
+  let type_env = ref (List.fold_left2 (fun env s t -> Smaps.add s t env) Smaps.empty ["Int";"String";"Unit";"Boolean";"Effect"] [(TInt,0);(TStr,0);(TUnit,0);(TBool,0);(TCons("Effect",[TUnit]),1)]) in
+  List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
+  verify_def !type_env !global_env_instances;
+  if not (Smaps.mem "main" !function_env) then failwith "Pas de Main" else ()
+
+and typ_declaration global_env type_env instance_env = function
+  | Dfdecl fdecl -> verify_def !type_env !global_env_instances;
+    let tau, var_env, inst_env = typ_fdecl global_env !type_env Smaps.empty fdecl in 
+    function_env := Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env
+  | Defn defn -> (match frst (smaps_find (fast defn) !function_env) with 
+    | TArrow(tlist, t) -> typ_defn global_env !type_env !global_env_instances true defn tlist t 
+    | _ -> failwith "Ma Qué Pasta"
+  )
+  | Ddata data -> verify_def !type_env !global_env_instances; typ_data global_env type_env instance_env data
+  | Dclass clas -> verify_def !type_env !global_env_instances; typ_class global_env !type_env !global_env_instances clas
+  | Dinstance dinst -> verify_def !type_env !global_env_instances; typ_instance global_env !type_env !global_env_instances dinst
+
+  | _ -> ()
 (*and typ_b
   ranch global_env type_env instance_env    type_env instance_env    (p, e) = function
     | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
