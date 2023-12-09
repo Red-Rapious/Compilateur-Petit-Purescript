@@ -908,14 +908,14 @@ and typ_file f =
          ])
   in
   List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
-  verify_def !type_env !global_env_instances;
+  verify_def !global_env_instances !type_env instance_env;
   if not (Smaps.mem "main" !function_env) then failwith "Pas de Main" else ()
 
 and typ_declaration global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
   function
   | Dfdecl fdecl ->
-      verify_def !type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       let tau, var_env, inst_env =
         typ_fdecl global_env !type_env Smaps.empty fdecl
       in
@@ -927,13 +927,13 @@ and typ_declaration global_env type_env
           typ_defn global_env !type_env !global_env_instances true defn tlist t
       | _ -> failwith "Ma Qué Pasta")
   | Ddata data ->
-      verify_def !type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       typ_data global_env !type_env instance_env data
   | Dclass clas ->
-      verify_def !type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       typ_class global_env !type_env instance_env clas
   | Dinstance (inst, dlist) ->
-      verify_def !type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       typ_instance global_env !type_env instance_env (inst, dlist)
   | _ -> ()
 (*and typ_b
