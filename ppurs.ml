@@ -1,6 +1,6 @@
 open Format
 open Lexing
-open Typing
+open Typing2
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
@@ -78,7 +78,7 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    ignore (Typing2.typ_file program);
+    ignore (typ_file program);
     if program.module_name <> "Main" then
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
@@ -104,31 +104,86 @@ let () =
       exit 1
 
     (* Erreur classique de typage *)
-    | Typing2.Typing_error (l, s) ->
+    | Typing_error (l, s) ->
       double_localisation l ;
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
     (* Pattern matching vide *)
-    | Typing2.Empty_pattern_matching l ->
+    | Empty_pattern_matching l ->
       double_localisation l ;
       eprintf "Pattern matching vide." ;
       exit 1
 
     (* Identifiant inconnu *)
-    | Typing2.Unknown_ident (l, id) ->
+    | Unknown_ident (l, id) ->
       double_localisation l ;
       eprintf "Identifiant inconnu : '%s'@." id ;
       exit 1
 
-    | Typing2.Non_exhaustive_pattern_matching loc ->
+    | Non_exhaustive_pattern_matching loc ->
       double_localisation loc ;
       eprintf "Ce pattern matching n'est pas exhaustif.@." ;
       exit 1
 
-    | Typing2.Too_many_arguments loc ->
+    | Too_many_arguments loc ->
       double_localisation loc ;
       eprintf "Trop d'arguments on été passés à la fonction.@." ;
+      exit 1
+
+    | Ident_used_twice (loc, id) ->
+      double_localisation loc ;
+      eprintf "L'identifiant '%s' est utilisé plusieurs fois.@." id ;
+      exit 1
+
+    | Multiple_filtering loc ->
+      double_localisation loc ;
+      eprintf "Le filtrage multiple n'est pas supporté.@." ;
+      exit 1
+
+    | Similar_names (loc, obj_name) ->
+      double_localisation loc ;
+      eprintf "Des %s avec des noms identiques sont utilisés.@." obj_name ;
+      exit 1
+
+    | Empty_definition loc ->
+      double_localisation loc ;
+      eprintf "Définition vide.@." ;
+      exit 1
+
+    | Double_definition loc ->
+      double_localisation loc ;
+      eprintf "Définition double.@." ;
+      exit 1
+
+    | Already_defined (loc, obj_name, id) ->
+      double_localisation loc ;
+      eprintf "%s avec le nom '%s' a déjà été défini.@." obj_name id ;
+      exit 1
+
+    | Unifiable_instances loc ->
+      double_localisation loc ;
+      eprintf "Les instances peuvent être unifiées.@." ;
+      exit 1
+
+    | MissingDefinition loc ->
+      double_localisation loc ;
+      eprintf "Définition manquante.@." ;
+      exit 1
+
+    | MissingMain ->
+      localisation (Lexing.dummy_pos) ;
+      eprintf "Le programme de contient pas de définition de 'main'.@." ;
+      exit 1
+
+    | MultipleFilteredVariables loc ->
+      double_localisation loc ;
+      eprintf "Impossible de filtrer sur des variables multiples.@." ;
+      exit 1
+
+    | BadTypesNumber loc ->
+      double_localisation loc ;
+      eprintf "Le nombre de type ne correspond pas au nombre attendu.@." ;
       exit 1
 
     (* Erreur de OCaml (ou failwith) *)
