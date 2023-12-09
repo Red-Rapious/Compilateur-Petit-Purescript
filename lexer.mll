@@ -57,6 +57,8 @@ rule token = parse
   | "<="                  { CMP Ble }
   | ">"                   { CMP Bgt }
   | ">="                  { CMP Bge }
+  | "&&"                  { AND }
+  | "||"                  { OR }
   | "="                   { SIMPLE_EQ }
   | "<>"                  { CONCAT }
   | "("                   { LPAREN }
