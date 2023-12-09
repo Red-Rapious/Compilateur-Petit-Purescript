@@ -15,7 +15,13 @@ clean:
 test: ppurs
 	./ppurs --type-only test.purs
 
-tests: ppurs
+tests1: ppurs
 	cd tests-10-nov ; ./test.bash -1 ../ppurs
+
+tests2: ppurs
+	cd tests-10-nov ; ./test.bash -2 ../ppurs
+
+tests3: ppurs
+	cd tests-10-nov ; ./test.bash -2 ../ppurs
 
 .PHONY: all clean explain ppurs

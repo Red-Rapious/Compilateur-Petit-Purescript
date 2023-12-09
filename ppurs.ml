@@ -104,21 +104,21 @@ let () =
       exit 1
 
     (* Erreur classique de typage *)
-    | Typing.Typing_error (l, s) ->
+    | Typing2.Typing_error (l, s) ->
       double_localisation l ;
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
     (* Pattern matching vide *)
-    | Typing.Empty_pattern_matching l ->
+    | Typing2.Empty_pattern_matching l ->
       double_localisation l ;
       eprintf "Pattern matching vide." ;
       exit 1
 
     (* Identifiant inconnu *)
-    | Typing.Unknown_ident (l, id) ->
+    | Typing2.Unknown_ident (l, id) ->
       double_localisation l ;
-      eprintf "Identifiant inconnu : %s@." id ;
+      eprintf "Identifiant inconnu : '%s'@." id ;
       exit 1
 
     | Typing2.Non_exhaustive_pattern_matching loc ->

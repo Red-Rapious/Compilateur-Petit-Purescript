@@ -910,8 +910,8 @@ and typ_file f =
          ])
   in
   List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
-  verify_def !global_env_instances !type_env (Smaps.empty); (* TODO: VERIFIER LE Smaps.empty *)
-  if not (Smaps.mem "main" !function_env) then failwith "Pas de Main" else ()
+  verify_def !global_env_instances !type_env (Smaps.empty); (* TODO: CHANGER LE Smaps.empty *)
+  if not (Smaps.mem "main" !function_env) then failwith "Pas de Main"
 
 and typ_declaration global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
