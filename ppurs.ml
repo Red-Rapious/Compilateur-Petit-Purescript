@@ -78,7 +78,7 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    ignore (Typing.type_file program.main);
+    ignore (Typing2.typ_file program);
     if program.module_name <> "Main" then
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
@@ -121,15 +121,15 @@ let () =
       eprintf "Identifiant inconnu : %s@." id ;
       exit 1
 
-    (*| Typing.Non_exhaustive_pattern_matching loc ->
-      localisation loc ;
-      eprintf "Ce pattern matching n'est pas exhaustif.@." id ;
+    | Typing2.Non_exhaustive_pattern_matching loc ->
+      double_localisation loc ;
+      eprintf "Ce pattern matching n'est pas exhaustif.@." ;
       exit 1
 
-    | Typing.Too_many_arguments loc ->
-      localisation loc ;
-      eprintf "Trop d'arguments on été passés à la fonction.@." id ;
-      exit 1*)
+    | Typing2.Too_many_arguments loc ->
+      double_localisation loc ;
+      eprintf "Trop d'arguments on été passés à la fonction.@." ;
+      exit 1
 
     (* Erreur de OCaml (ou failwith) *)
     | e ->

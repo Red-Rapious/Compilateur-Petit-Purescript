@@ -908,7 +908,7 @@ and typ_file f =
          ])
   in
   List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
-  verify_def !global_env_instances !type_env instance_env;
+  verify_def !global_env_instances !type_env (Smaps.empty); (* TODO: VERIFIER LE Smaps.empty *)
   if not (Smaps.mem "main" !function_env) then failwith "Pas de Main" else ()
 
 and typ_declaration global_env type_env
@@ -935,8 +935,8 @@ and typ_declaration global_env type_env
   | Dinstance (inst, dlist) ->
       verify_def !global_env_instances !type_env instance_env;
       typ_instance global_env !type_env instance_env (inst, dlist)
-  | _ -> ()
-(*and typ_b
+
+      (*and typ_b
   ranch global_env type_env instance_env    type_env instance_env    (p, e) = function
     | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
     | _ ->
