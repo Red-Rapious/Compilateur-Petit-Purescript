@@ -3,6 +3,8 @@ open Pretty
 
 (*Cette Partie du Code a été écrite par Matthieu Boyer, en s'étant librement inspiré de l'architecture d'environnement du code de Nathan Boyer*)
 
+let placeholder_loc = Lexing.dummy_pos, Lexing.dummy_pos
+
 let rec typ_eq t1 t2 =
   match (t1, t2) with
   | TUnit, TUnit | TStr, TStr | TInt, TInt | TBool, TBool -> true
@@ -146,7 +148,7 @@ let frth (a, b, c, d) = d
 
 let smaps_find id env =
   try Smaps.find id env
-  with Not_found -> raise (Unknown_ident (failwith "localiser l'ident", id))
+  with Not_found -> raise (Unknown_ident (placeholder_loc, id))
 
 let function_env =
   ref
@@ -394,7 +396,7 @@ and compat_instances instance_env cident id instances tlist global =
     | t1 :: q1, t2 :: q2 when typ_eq t1 t2 -> consmap env q1 q2
     | _ ->
         typing_error
-          (failwith "trouver la localisation des instances")
+          placeholder_loc
           "appel incompatible avec la définition"
   in
   let env = consmap Smaps.empty ftlist tlist in
@@ -422,7 +424,7 @@ and compat_instances instance_env cident id instances tlist global =
   let rec find_valid tlist = function
     | [] ->
         typing_error
-          (failwith "implémenter la localisation")
+          placeholder_loc
           "instances incompatibles"
     | tl :: q
       when (((not global) && valid (fst tl) tlist)
@@ -464,7 +466,7 @@ and typ_pattern global_env type_env instance_env t = function
   | Pconsarg (id, plist) ->
       let cons = smaps_find id !cons_env in
       if not (typ_eq cons.ctyp t) then
-        typing_error (failwith "localiser")
+        typing_error placeholder_loc
           "le constructeur est de mauvais type"
       else
         let rec aux env plist tlist =
@@ -481,7 +483,7 @@ and typ_pattern global_env type_env instance_env t = function
                 fvars = Vset.union a.fvars env.fvars;
               }
           | _ ->
-              typing_error (failwith "localiser")
+              typing_error placeholder_loc
                 "mauvaise arité pour le constructeur"
         in
         aux global_env plist cons.ctlist
@@ -617,14 +619,14 @@ let verify_def global_env type_env
                   (exhaustive_list empty type_env instance_env
                      [ List.nth tlist col ]
                      (List.map
-                        (fun x -> [ Parg(failwith "Trouver la localisation" ,x) ])
+                        (fun x -> [ Parg(placeholder_loc ,x) ])
                         (List.map
                            (fun defn ->
                              aux col
                                (fast defn, List.map snd (sand defn), trad defn))
                            !eqlist)))
               then
-                raise (Non_exhaustive_pattern_matching (failwith "LOCALISER"))
+                raise (Non_exhaustive_pattern_matching placeholder_loc)
               else curr_defined := "";
               eqlist := []
           | _ -> failwith "Impossible")
@@ -868,7 +870,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
                     (exhaustive_list global_env type_env instance_env
                        [ sub (List.nth tl c) ]
                        (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
-                then failwith "Pattern Matching non Exhaustif"
+                then (raise (Non_exhaustive_pattern_matching placeholder_loc))
                 else ())
         | _ -> failwith "Ma qué Pasta"
       in
