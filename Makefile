@@ -15,6 +15,9 @@ clean:
 test: ppurs
 	./ppurs --type-only test.purs
 
+tests:
+	@echo "'make tests' n'est pas une commande valide. Essayez 'make tests1', 'make tests2', ou 'make tests3'."
+
 tests1: ppurs
 	cd tests-10-nov ; ./test.bash -1 ../ppurs
 

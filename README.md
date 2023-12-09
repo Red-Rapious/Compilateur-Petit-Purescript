@@ -3,7 +3,7 @@
 ## Exécution
 - La commande `make` créé le compilateur, nommé `ppurs`, à la racine du projet.
 - La commande `make test` créé et exécute le compilateur sur le fichier par défaut `test.purs`.
-- La commande `make tests` exécute le compilateur sur les jeux de tests.
+- La commande `make tests1` exécute le compilateur sur les jeux de tests de la partie 1 (respectivement 2 et 3).
 - La commande `make clean` supprime les fichiers créés par `make`
 
 Une fois créé, le compilateur peut être exécuté en lançant une commande de la forme :
