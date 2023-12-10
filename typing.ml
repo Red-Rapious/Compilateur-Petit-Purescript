@@ -776,7 +776,9 @@ and typ_class global_env type_env instance_env (clas : clas) =
              types = tl;
              out_type = t;
            })
-         clas.decls)
+         clas.decls);
+         class_env := Smaps.add clas.name (clas.params, !class_functions, []) !class_env;
+         global_env_instances := Smaps.add clas.name [] !global_env_instances
 
 and add_atype type_env = function
   | Tident s :: q when is_lower s ->
@@ -802,8 +804,7 @@ and add_ntype_list type_env = function
         (add_ntype type_env n)
         (add_ntype_list Smaps.empty q)
 
-and typ_instance global_env type_env instance_env (dinst : instance * defn list)
-    =
+and typ_instance global_env type_env instance_env (dinst : instance * defn list) =
   match fst dinst with
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
@@ -924,7 +925,7 @@ and typ_file f =
            (TCons ("Effect", [ TUnit ]), 1);
          ])
   in
-  List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
+  List.iter (typ_declaration global_env !type_env !global_env_instances) f.main;
   verify_def global_env !type_env !global_env_instances ; 
   if not (Smaps.mem "main" !function_env) then raise MissingMain
 
@@ -932,26 +933,26 @@ and typ_declaration global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
   function
   | Dfdecl fdecl ->
-      verify_def !global_env_instances !type_env instance_env;
+      verify_def !global_env_instances type_env instance_env;
       let tau, var_env, inst_env =
-        typ_fdecl global_env !type_env Smaps.empty fdecl
+        typ_fdecl global_env type_env Smaps.empty fdecl
       in
       function_env :=
         Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env
   | Defn defn -> (
       match frst (smaps_find (fast defn) !function_env) with
       | TArrow (tlist, t) ->
-          typ_defn global_env !type_env !global_env_instances true defn tlist t
+          typ_defn global_env type_env !global_env_instances true defn tlist t
       | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow")
   | Ddata data ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_data global_env !type_env instance_env data
+      verify_def !global_env_instances type_env instance_env;
+      typ_data global_env type_env instance_env data
   | Dclass clas ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_class global_env !type_env instance_env clas
+      verify_def !global_env_instances type_env instance_env;
+      typ_class global_env type_env instance_env clas
   | Dinstance (inst, dlist) ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_instance global_env !type_env instance_env (inst, dlist)
+      verify_def !global_env_instances type_env instance_env;
+      typ_instance global_env type_env instance_env (inst, dlist)
 
       (*and typ_b
   ranch global_env type_env instance_env    type_env instance_env    (p, e) = function

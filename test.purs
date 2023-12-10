@@ -4,6 +4,7 @@ import Prelude
 import Effect
 import Effect.Console
 
+<<<<<<< Updated upstream
 main :: Effect Unit
 main = do
   log (show (1 < 2))
@@ -21,3 +22,11 @@ main = do
   log (show (unit /= unit))
 
 
+=======
+class C a where
+  foo:: a -> String
+class C a where
+  val:: a -> Int
+main :: Effect Unit
+main = log ""
+>>>>>>> Stashed changes
