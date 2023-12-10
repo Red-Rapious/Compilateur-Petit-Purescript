@@ -243,7 +243,7 @@ let rec typ_exp global_env type_env
       match op with
       | Beq | Bneq -> (
           match s1 with
-          | TInt | TBool | TStr -> TBool
+          | TInt | TBool | TStr | TUnit -> TBool
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
@@ -808,7 +808,8 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
-  if Smaps.mem (fst n) instance_env then failwith "Double Définition" else
+  if Smaps.mem (fst n) instance_env then raise (Double_definition placeholder_loc)
+  else
       let cons_id = fst n in
       let sl, class_functions, fl = smaps_find cons_id !class_env in
       let rec add_instance instance_env type_env = function
