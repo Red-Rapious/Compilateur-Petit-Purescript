@@ -808,6 +808,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
+  if Smaps.mem (fst n) instance_env then failwith "Double Définition" else
       let cons_id = fst n in
       let sl, class_functions, fl = smaps_find cons_id !class_env in
       let rec add_instance instance_env type_env = function
@@ -923,7 +924,7 @@ and typ_file f =
          ])
   in
   List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
-  verify_def !global_env_instances !type_env (Smaps.empty); (* TODO: CHANGER LE Smaps.empty *)
+  verify_def global_env !type_env !global_env_instances ; 
   if not (Smaps.mem "main" !function_env) then raise MissingMain
 
 and typ_declaration global_env type_env
