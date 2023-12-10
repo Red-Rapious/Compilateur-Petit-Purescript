@@ -1,21 +1,17 @@
 open Ast
 open Pretty
 
-(*Cette Partie du Code a été écrite par Matthieu Boyer, en s'étant librement inspiré de l'architecture d'environnement du code de Nathan Boyer*)
-
-exception UnificationFailure of ttyp * ttyp
-
 exception TypingError of loc * string
 exception EmptyPatternMatching of loc
 exception UnknownIdent of loc * Ast.ident
 exception NonExhaustivePatternMatching of loc
 exception TooManyArguments of loc
-exception IdentUsedTwice of loc * string
+exception IdentUsedTwice of loc * string (* localisation * identifiant *)
 exception MultipleFiltering of loc
-exception SimilarNames of loc * string
+exception SimilarNames of loc * string (* localisation * nom de l'objet *)
 exception EmptyDefinition of loc
-exception DoubleDefinition of loc * string
-exception AlreadyDefined of loc * string * string (* loc * nom de l'objet * nom spécifique déjà défini *)
+exception DoubleDefinition of loc * string (* localisation * identifiant *)
+exception AlreadyDefined of loc * string * string (* localisation * nom de l'objet * nom spécifique déjà défini *)
 exception UnifiableInstances of loc
 exception MissingDefinition of loc
 exception MissingMain
@@ -31,9 +27,6 @@ let rec canon t =
   | TVar { id = a; def = Some t } -> TVar { id = a; def = Some (canon t) }
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
   | TCons (s, t) -> TCons (s, List.map canon t)
-
-
-let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
 
 
 let typing_error loc s = raise (TypingError (loc, s))
@@ -162,6 +155,7 @@ let smaps_find id env =
   try Smaps.find id env
   with Not_found -> raise (UnknownIdent (placeholder_loc, id))
 
+(*Cette partie du code a été écrite par Matthieu Boyer, en s'étant inspiré de l'architecture d'environnement du code de Nathan Boyer *)
 let function_env =
   ref
     (List.fold_left2
@@ -417,34 +411,34 @@ and compat_instances instance_env cident id instances tlist global =
     | [], [] -> true
     | _ -> false
   in
-  let rec basic_instinct tlist = function
+  let rec compatible tlist = function
     | [] -> false
     | h :: t ->
         (((not global) && valid h tlist) || (global && unify h tlist))
-        || basic_instinct tlist t
+        || compatible tlist t
   in
-  let rec all_basic_instinct
+  let rec all_compatible
       (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
     function
     | [] -> true    
     | (s, tlist) :: q ->
-        basic_instinct tlist (List.map fst (smaps_find s instance_env))
-        && all_basic_instinct instance_env q
+      compatible tlist (List.map fst (smaps_find s instance_env))
+        && all_compatible instance_env q
   in
   let rec find_valid tlist = function
     | [] ->
         typing_error
           placeholder_loc
           "instances incompatibles"
-    | tl :: q
-      when (((not global) && valid (fst tl) tlist)
-           || (global && unify (fst tl) tlist))
-           && all_basic_instinct instance_env (snd tl) ->
-        ()
-    | tl :: q -> find_valid tlist q
+    | tl :: q -> if not (
+      (
+        ((not global) && valid (fst tl) tlist)
+        || (global && unify (fst tl) tlist)
+      )
+      && all_compatible instance_env (snd tl)
+    ) then find_valid tlist q
   in
   find_valid variables instances
-(*Il fallait juste renvoyer unit, le but était de vérifier que ça n'explose pas 🤯 *)
 
 and typ_atom global_env type_env instance_env global (l, a) =
   match a with
@@ -583,6 +577,7 @@ and exhaustive_list global_env type_env instance_env tlist pllist =
   in
   List.length tlist = 0 || aux 0 pllist
 
+(* Fonctions utilitaires pour accéder aux éléments d'un 3-uplet *)
 let fast (a, b, c) = a
 let sand (a, b, c) = b
 let trad (a, b, c) = c
@@ -641,6 +636,7 @@ let verify_def global_env type_env
               eqlist := []
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
 
+(* Typage d'une déclaration de fonction *)
 let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
   (* on vérifie que la fonction n'est pas déjà définie ailleurs *)
   if Smaps.mem fdecl.name !function_env then (raise (IdentUsedTwice (placeholder_loc, fdecl.name)))
@@ -673,6 +669,7 @@ let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
       var_type_env,
       instance_env )
 
+(* Typage d'une définition *)
 and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
   if deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
   then raise (DoubleDefinition (placeholder_loc, (fast defn)))
@@ -708,6 +705,8 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
            t)
     then typing_error placeholder_loc "mauvais type de retour")
 
+
+(* Typage d'une déclaration "data" *)
 and typ_data global_env type_env instance_env (data : data) =
   if Smaps.mem data.name !type_env then raise (AlreadyDefined (placeholder_loc, "Un type", data.name))
   else if not (no_same_name data.params) then
@@ -746,6 +745,7 @@ and typ_data global_env type_env instance_env (data : data) =
     in
     add_cons data.types; 
 
+(* Typage d'une classe *)
 and typ_class global_env type_env instance_env (clas : clas) =
   if Smaps.mem clas.name !class_env then raise (AlreadyDefined (placeholder_loc, "Une classe", clas.name))
   else
@@ -799,6 +799,7 @@ and add_ntype_list type_env = function
         (add_ntype type_env n)
         (add_ntype_list Smaps.empty q)
 
+(* Typage d'une instance *)
 and typ_instance global_env type_env instance_env (dinst : instance * defn list) =
   match fst dinst with
   | Intype n ->
@@ -864,9 +865,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
             let _ = col found (i + 1) q in
             i
       in
-      (*let filter_col col (defn : defn) =
-          List.nth (sand defn) col
-        in*)
+      (* Vérification de l'exhaustivité d'un pattern matching *)
       let check_exhaust s = function
         | TArrow (tl, _) -> (
             let l = filter s (snd dinst) in
@@ -901,6 +900,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
           :: smaps_find (fst n) !global_env_instances)
           !global_env_instances
 
+(* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
 and typ_file f =
   let global_env = add false "unit" TUnit empty in
   let type_env =
@@ -921,6 +921,7 @@ and typ_file f =
   verify_def global_env !type_env !global_env_instances ; 
   if not (Smaps.mem "main" !function_env) then raise MissingMain
 
+(* Typage d'une déclaration *)
 and typ_declaration global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
   function
@@ -945,82 +946,3 @@ and typ_declaration global_env type_env
   | Dinstance (inst, dlist) ->
       verify_def !global_env_instances !type_env instance_env;
       typ_instance global_env !type_env instance_env (inst, dlist)
-
-      (*and typ_b
-  ranch global_env type_env instance_env    type_env instance_env    (p, e) = function
-    | p, e -> (typ_pattern global_env type_env instance_env    type_env instance_env    p, typ_exp global_env type_env instance_env    type_env instance_env    e)
-    | _ ->
-        (*Ceci ne sera jamais affiché si le lexing et le parsing sont corrects*)
-        failwith
-          "You think I hate you? I don't hate you. This job is eating me alive, \
-           I can't breathe anymore, and if I come out this guy Lefty dies. \
-           They're gonna kill him because he vouched for me because he stood up \
-           for me I live with that every day. That's the same thing as if I put \
-           the bullet in his head myself, you understand? I spent all these \
-           years being the good guy, you know the man in the white fucking hat, \
-           for what? For nothing. I'm not becoming like them Maggie, I am them."*)
-
-(* Le bloc ci-dessous est commenté suite à un changement de perspective. Le bloc ci-dessus est commenté parce que je code avec les pieds. *)
-(* let rec well_formed_declaration global_env type_env instance_env local_env
-       declaration =
-     let table = Hashtbl.create (List.length declaration.variables) in
-     let rec run = function
-       | h :: t ->
-           Hashtbl.add table h h;
-           run t
-       | [] -> ()
-     in
-     run declaration.variables;
-     List.for_all
-       (fun i ->
-         well_formed_instance global_env type_env instance_env local_env (Intype i))
-       declaration.ntypes
-     && List.for_all
-          (fun i -> well_formed_typ global_env type_env instance_env local_env i)
-          declaration.types
-
-   and well_formed_instance global_env type_env instance_env local_env = function
-     | Intype (n, n1) -> true
-     | Iarrow (nl, n) ->
-         if
-           List.for_all
-             (fun x ->
-               well_formed_ntype global_env type_env instance_env local_env x)
-             nl
-         then well_formed_ntype global_env type_env instance_env local_env n
-         else false
-
-   and well_formed_typ global_env type_env instance_env local_env t =
-     match t with
-     | Tatype a -> well_formed_atype global_env type_env instance_env local_env a
-     | Tntype n -> well_formed_ntype global_env type_env instance_env local_env n
-
-   and well_formed_atype global_env type_env instance_env local_env = function
-     | Tident id -> (
-         try
-           let _ = find id local_env in
-           true
-         with Not_found -> failwith "Type non défini")
-     | Ttype t -> well_formed_typ global_env type_env instance_env local_env t
-
-   and well_formed_ntype global_env type_env instance_env local_env (id, al) =
-     try
-       let l = find id global_env in
-       (*On vérifie que le constructeur étudié est bien défini*)
-       match l with
-       | TCons (s, nl) ->
-           (*On représente les constructeurs comme des fonctions dont on vérifie l'arité*)
-           List.length nl == List.length al
-           && List.for_all
-                (fun x ->
-                  well_formed_atype global_env type_env instance_env local_env x)
-                al
-       | _ -> failwith "Ceci n'est pas un constructeur"
-     with Not_found -> failwith "Constructeur non défini" *)
-
-(* Algorithme :
-   - On parcourt les déclarations du programme dans l'ordre.
-   - On initialise l'environnement global de typage avec les déclarations prédéfinies.
-   - On ajoute les types des déclarations dans l'environnement global de typage.
-   - A chaque fois qu'on doit vérifier un jugement bien formé, on crée un environnement local spécifique.
-*)

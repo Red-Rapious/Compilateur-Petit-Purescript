@@ -89,6 +89,8 @@ and comment = parse
   | _                     { comment lexbuf }
   | eof                   { raise (Lexing_error ("unterminated comment")) }
 
+(* Remarque : cette manière de localiser les chaînes de caractères 
+empêche une bonne localisation du début et de la fin de la chaîne. *)
 and string = parse
   | '"'     { 
     let s = Buffer.contents string_buffer in

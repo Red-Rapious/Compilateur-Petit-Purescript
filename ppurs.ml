@@ -83,7 +83,6 @@ let () =
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
     failwith "La production de code n'est pas implémentée pour l'instant"
-    (*Interp.prog p*)
   with
     (* Erreur lexicale *)
     | Lexer.Lexing_error c ->
@@ -112,7 +111,7 @@ let () =
     (* Pattern matching vide *)
     | EmptyPatternMatching l ->
       double_localisation l ;
-      eprintf "Pattern matching vide." ;
+      eprintf "Pattern matching vide.@." ;
       exit 1
 
     (* Identifiant inconnu *)
