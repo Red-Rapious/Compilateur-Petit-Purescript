@@ -26,3 +26,8 @@ Les fichiers sources du projet sont les suivants :
 - `ast.ml` contient l'arbre de syntaxe abstraite. La distinction entre `uident` et `lident` est abandonnée par le parser dans l'AST. À part cela, l'AST est très proche de la grammaire du sujet. 
 - `typing.ml` contient l'analyseur sémantique. Dans l'état actuel du projet, l'AST typé n'est pas généré, et l'analyseur se contente de vérifier la correction sémantique du programme. Ceci sera évidemment modifié pour la partie de production de code.
 - `ppurs.ml` est le fichier principal qui traite les arguments de la ligne de commande, appelle successivement les différents analyseurs, et gère les éventuelles erreurs advenant au cours de la compilation.
+
+### Limitations connues
+- L'AST typé n'est pas généré.
+- Certains tests de typages ne renvoient pas encore le bon résultat.
+- Certaines erreurs ne sont pas localisées, ce qui se voit à l'emploi temporaire de `placeholder_loc` dans les exceptions. 

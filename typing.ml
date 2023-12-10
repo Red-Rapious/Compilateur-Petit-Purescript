@@ -681,6 +681,8 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
     let global_env =
+      if List.length plist <> List.length tlist then 
+        raise (BadTypesNumber placeholder_loc) ;
       List.fold_right2
         (fun pt t envi ->
           let a = typ_patarg empty type_env instance_env t pt in
