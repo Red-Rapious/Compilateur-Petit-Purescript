@@ -712,14 +712,12 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
     else ())
 
 and typ_data global_env type_env instance_env (data : data) =
-  if Smaps.mem data.name type_env then raise (Already_defined (placeholder_loc, "Un type", data.name))
+  if Smaps.mem data.name !type_env then raise (Already_defined (placeholder_loc, "Un type", data.name))
   else if not (no_same_name data.params) then
     raise (Similar_names (placeholder_loc, "variables"))
   else
     let tau = TCons (data.name, []) in
-    let type_env =
-      Smaps.add data.name (tau, List.length data.params) type_env
-    in
+    type_env := Smaps.add data.name (tau, List.length data.params) !type_env;
     let var_type_env =
       List.fold_left
         (fun env id -> Smaps.add id (TAlias id, 0) env)
@@ -728,7 +726,7 @@ and typ_data global_env type_env instance_env (data : data) =
     let real_type_env =
       Smaps.union
         (fun _ _ _ -> raise (Similar_names (placeholder_loc, "variables")))
-        var_type_env type_env
+        var_type_env !type_env
     in
     let rec add_cons = function
       | [] -> ()
@@ -749,7 +747,7 @@ and typ_data global_env type_env instance_env (data : data) =
                 !cons_env;
           add_cons t
     in
-    add_cons data.types
+    add_cons data.types; 
 
 and typ_class global_env type_env instance_env (clas : clas) =
   if Smaps.mem clas.name !class_env then raise (Already_defined (placeholder_loc, "Une classe", clas.name))
@@ -925,7 +923,7 @@ and typ_file f =
            (TCons ("Effect", [ TUnit ]), 1);
          ])
   in
-  List.iter (typ_declaration global_env !type_env !global_env_instances) f.main;
+  List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
   verify_def global_env !type_env !global_env_instances ; 
   if not (Smaps.mem "main" !function_env) then raise MissingMain
 
@@ -933,26 +931,26 @@ and typ_declaration global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
   function
   | Dfdecl fdecl ->
-      verify_def !global_env_instances type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       let tau, var_env, inst_env =
-        typ_fdecl global_env type_env Smaps.empty fdecl
+        typ_fdecl global_env !type_env Smaps.empty fdecl
       in
       function_env :=
         Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env
   | Defn defn -> (
       match frst (smaps_find (fast defn) !function_env) with
       | TArrow (tlist, t) ->
-          typ_defn global_env type_env !global_env_instances true defn tlist t
+          typ_defn global_env !type_env !global_env_instances true defn tlist t
       | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow")
   | Ddata data ->
-      verify_def !global_env_instances type_env instance_env;
+      verify_def !global_env_instances !type_env instance_env;
       typ_data global_env type_env instance_env data
   | Dclass clas ->
-      verify_def !global_env_instances type_env instance_env;
-      typ_class global_env type_env instance_env clas
+      verify_def !global_env_instances !type_env instance_env;
+      typ_class global_env !type_env instance_env clas
   | Dinstance (inst, dlist) ->
-      verify_def !global_env_instances type_env instance_env;
-      typ_instance global_env type_env instance_env (inst, dlist)
+      verify_def !global_env_instances !type_env instance_env;
+      typ_instance global_env !type_env instance_env (inst, dlist)
 
       (*and typ_b
   ranch global_env type_env instance_env    type_env instance_env    (p, e) = function
