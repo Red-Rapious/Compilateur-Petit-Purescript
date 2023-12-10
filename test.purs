@@ -4,13 +4,13 @@ import Prelude
 import Effect
 import Effect.Console
 
-class C where
-  foo:: Int -> String
+data T = A | B
 
-instance C where
-  foo _ = "a"
+foo:: T -> String
+foo A = "hello"
+foo B = "world"
 
 main :: Effect Unit
-main = log (foo 1)
-
+main = do log (foo A)
+          log (foo B)
 

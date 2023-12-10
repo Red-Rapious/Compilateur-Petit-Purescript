@@ -476,8 +476,7 @@ and typ_pattern global_env type_env instance_env t = function
   | Pconsarg (id, plist) ->
       let cons = smaps_find id !cons_env in
       if not (typ_eq cons.ctyp t) then
-        typing_error placeholder_loc
-          "le constructeur est de mauvais type"
+        typing_error (fst (fst (List.hd plist)), snd (fst (List.nth plist ((List.length plist) - 1)))) ("le constructeur '" ^ id ^"' est de mauvais type")
       else
         let rec aux env plist tlist =
           match (plist, tlist) with
@@ -488,12 +487,12 @@ and typ_pattern global_env type_env instance_env t = function
               {
                 bindings =
                   Smaps.union
-                    (fun s _ _ -> raise (Ident_used_twice (placeholder_loc, s)))
+                    (fun s _ _ -> raise (Ident_used_twice (fst p, s)))
                     env.bindings a.bindings;
                 fvars = Vset.union a.fvars env.fvars;
               }
           | _ ->
-              typing_error placeholder_loc
+              typing_error (fst (List.hd plist))
                 "mauvaise arité pour le constructeur"
         in
         aux global_env plist cons.ctlist
@@ -520,12 +519,12 @@ and ast_type global_env type_env instance_env = function
 and ast_atype global_env type_env instance_env = function
   | Tident s ->
       let t, arity = smaps_find s type_env in
-      if arity = 0 then t else typing_error placeholder_loc "mauvaise arité de constructeur/de type"
+      if arity = 0 then t else typing_error placeholder_loc ("mauvaise arité du constructeur/type " ^ s)
   | Ttype t -> ast_type global_env type_env instance_env t
 
 and ast_ntype global_env type_env instance_env (id, al) =
   let t, arity = smaps_find id type_env in
-  if List.length al <> arity then typing_error placeholder_loc "mauvaise arité de constructeur"
+  if List.length al <> arity then typing_error placeholder_loc ("mauvaise arité du constructeur " ^ id)
   else
     match t with
     | TCons (s, _) ->
@@ -680,8 +679,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
     let global_env =
-      if List.length plist <> List.length tlist then 
-        raise (BadTypesNumber placeholder_loc) ;
+      if List.length plist <> List.length tlist then raise (BadTypesNumber (fst (List.nth plist ((List.length plist) - 1)))) ;
       List.fold_right2
         (fun pt t envi ->
           let a = typ_patarg empty type_env instance_env t pt in
@@ -861,7 +859,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
       let rec col found i = function
         | [] -> -1
         | (l, x) :: q when is_ident x -> col found (i + 1) q
-        | x :: q when found -> raise (MultipleFilteredVariables placeholder_loc)
+        | x :: q when found -> raise (MultipleFilteredVariables (fst x))
         | x :: q ->
             let _ = col found (i + 1) q in
             i
@@ -882,7 +880,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
                     (exhaustive_list global_env type_env instance_env
                        [ sub (List.nth tl c) ]
                        (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
-                then (raise (Non_exhaustive_pattern_matching placeholder_loc)))
+                then (raise (Non_exhaustive_pattern_matching (placeholder_loc))))
         | _ -> failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
       in
 
