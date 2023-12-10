@@ -104,64 +104,64 @@ let () =
       exit 1
 
     (* Erreur classique de typage *)
-    | Typing_error (l, s) ->
+    | TypingError (l, s) ->
       double_localisation l ;
       eprintf "Erreur de typage : %s@." s;
       exit 1
 
     (* Pattern matching vide *)
-    | Empty_pattern_matching l ->
+    | EmptyPatternMatching l ->
       double_localisation l ;
       eprintf "Pattern matching vide." ;
       exit 1
 
     (* Identifiant inconnu *)
-    | Unknown_ident (l, id) ->
+    | UnknownIdent (l, id) ->
       double_localisation l ;
       eprintf "Identifiant inconnu : '%s'@." id ;
       exit 1
 
-    | Non_exhaustive_pattern_matching loc ->
+    | NonExhaustivePatternMatching loc ->
       double_localisation loc ;
       eprintf "Ce pattern matching n'est pas exhaustif.@." ;
       exit 1
 
-    | Too_many_arguments loc ->
+    | TooManyArguments loc ->
       double_localisation loc ;
       eprintf "Trop d'arguments on été passés à la fonction.@." ;
       exit 1
 
-    | Ident_used_twice (loc, id) ->
+    | IdentUsedTwice (loc, id) ->
       double_localisation loc ;
       eprintf "L'identifiant '%s' est utilisé plusieurs fois.@." id ;
       exit 1
 
-    | Multiple_filtering loc ->
+    | MultipleFiltering loc ->
       double_localisation loc ;
       eprintf "Le filtrage multiple n'est pas supporté.@." ;
       exit 1
 
-    | Similar_names (loc, obj_name) ->
+    | SimilarNames (loc, obj_name) ->
       double_localisation loc ;
       eprintf "Des %s avec des noms identiques sont utilisés.@." obj_name ;
       exit 1
 
-    | Empty_definition loc ->
+    | EmptyDefinition loc ->
       double_localisation loc ;
       eprintf "Définition vide.@." ;
       exit 1
 
-    | Double_definition (loc, id) ->
+    | DoubleDefinition (loc, id) ->
       double_localisation loc ;
       eprintf "Définition double de '%s'.@." id;
       exit 1
 
-    | Already_defined (loc, obj_name, id) ->
+    | AlreadyDefined (loc, obj_name, id) ->
       double_localisation loc ;
       eprintf "%s avec le nom '%s' a déjà été défini.@." obj_name id ;
       exit 1
 
-    | Unifiable_instances loc ->
+    | UnifiableInstances loc ->
       double_localisation loc ;
       eprintf "Les instances peuvent être unifiées.@." ;
       exit 1

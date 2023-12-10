@@ -5,18 +5,18 @@ open Pretty
 
 exception UnificationFailure of ttyp * ttyp
 
-exception Typing_error of loc * string
-exception Empty_pattern_matching of loc
-exception Unknown_ident of loc * Ast.ident
-exception Non_exhaustive_pattern_matching of loc
-exception Too_many_arguments of loc
-exception Ident_used_twice of loc * string
-exception Multiple_filtering of loc
-exception Similar_names of loc * string
-exception Empty_definition of loc
-exception Double_definition of loc * string
-exception Already_defined of loc * string * string (* loc * nom de l'objet * nom spécifique déjà défini *)
-exception Unifiable_instances of loc
+exception TypingError of loc * string
+exception EmptyPatternMatching of loc
+exception UnknownIdent of loc * Ast.ident
+exception NonExhaustivePatternMatching of loc
+exception TooManyArguments of loc
+exception IdentUsedTwice of loc * string
+exception MultipleFiltering of loc
+exception SimilarNames of loc * string
+exception EmptyDefinition of loc
+exception DoubleDefinition of loc * string
+exception AlreadyDefined of loc * string * string (* loc * nom de l'objet * nom spécifique déjà défini *)
+exception UnifiableInstances of loc
 exception MissingDefinition of loc
 exception MissingMain
 exception MultipleFilteredVariables of loc
@@ -36,7 +36,7 @@ let rec canon t =
 let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
 
 
-let typing_error loc s = raise (Typing_error (loc, s))
+let typing_error loc s = raise (TypingError (loc, s))
 
 let placeholder_loc = Lexing.dummy_pos, Lexing.dummy_pos
 
@@ -160,7 +160,7 @@ let frth (a, b, c, d) = d
 
 let smaps_find id env =
   try Smaps.find id env
-  with Not_found -> raise (Unknown_ident (placeholder_loc, id))
+  with Not_found -> raise (UnknownIdent (placeholder_loc, id))
 
 let function_env =
   ref
@@ -292,7 +292,7 @@ let rec typ_exp global_env type_env
   | Ecase (e, bl) -> (
       let t = typ_exp global_env type_env instance_env global e in
       match bl with
-      | [] -> raise (Empty_pattern_matching (fst e))
+      | [] -> raise (EmptyPatternMatching (fst e))
       | b :: tail ->
           let tau = typ_branch global_env type_env instance_env t global b in
           List.iter
@@ -301,13 +301,13 @@ let rec typ_exp global_env type_env
                 not
                   (typ_eq tau
                      (typ_branch global_env type_env instance_env t global x))
-              then raise (Typing_error (fst e, "mauvais type")))
+              then raise (TypingError (fst e, "mauvais type")))
             tail;
           if
             not
               (exhaustive_list global_env type_env instance_env [ t ]
                  (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
-          then raise (Non_exhaustive_pattern_matching (fst e))
+          then raise (NonExhaustivePatternMatching (fst e))
           else tau)
   | Elet (bl, e) ->
       let rec aux global_env type_env instance_env l =
@@ -386,11 +386,11 @@ let rec typ_exp global_env type_env
                              (typ_atom global_env type_env instance_env global a))
                       then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
-              | _ -> raise (Too_many_arguments loc)
+              | _ -> raise (TooManyArguments loc)
             in
             aux tlist al;
             substitute !vars t)
-        with Not_found -> raise (Unknown_ident (loc, id)))
+        with Not_found -> raise (UnknownIdent (loc, id)))
 
 and compat_instances instance_env cident id instances tlist global =
   let slist, class_functions, functions = smaps_find cident !class_env in
@@ -451,7 +451,7 @@ and typ_atom global_env type_env instance_env global (l, a) =
   | Aconst c -> (
       match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
   | Aident id when is_lower id -> (
-      try find id global_env with Not_found -> raise (Unknown_ident (l, id)))
+      try find id global_env with Not_found -> raise (UnknownIdent (l, id)))
   | Aident id -> (smaps_find id !cons_env).ctyp
   | Aexpr e -> typ_exp global_env type_env instance_env global e
   | Atypedexpr (e, tau) ->
@@ -487,7 +487,7 @@ and typ_pattern global_env type_env instance_env t = function
               {
                 bindings =
                   Smaps.union
-                    (fun s _ _ -> raise (Ident_used_twice (fst p, s)))
+                    (fun s _ _ -> raise (IdentUsedTwice (fst p, s)))
                     env.bindings a.bindings;
                 fvars = Vset.union a.fvars env.fvars;
               }
@@ -597,7 +597,7 @@ let verify_def global_env type_env
   let rec no_dups found i = function
     | [] -> -1
     | h :: t when is_ident h -> no_dups found (i + 1) t
-    | h :: t when found -> raise (Multiple_filtering placeholder_loc)
+    | h :: t when found -> raise (MultipleFiltering placeholder_loc)
     | h :: t ->
         let _ = no_dups true (i + 1) t in
         i
@@ -607,19 +607,20 @@ let verify_def global_env type_env
   else
     let type_env =
       Smaps.union
-        (fun _ _ _ -> raise (Similar_names (placeholder_loc, "variables")))
+        (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "variables")))
         type_env
         (scnd (smaps_find !curr_defined !function_env))
     in
     eqlist := List.rev !eqlist;
     match !eqlist with
-    | [] -> raise (Empty_definition placeholder_loc)
+    | [] -> raise (EmptyDefinition placeholder_loc)
     | h :: t -> (
         let col = no_dups false 0 (List.map snd (sand h)) in
         if col = -1 then (
-          if List.length !eqlist > 1 then (raise (Double_definition (placeholder_loc, fast h)))
+          if List.length !eqlist > 1 then (raise (DoubleDefinition (placeholder_loc, fast h)))
           else curr_defined := "";
-          eqlist := [])
+          eqlist := []
+        )
         else
           match frst (smaps_find !curr_defined !function_env) with
           | TArrow (tlist, t) ->
@@ -635,16 +636,16 @@ let verify_def global_env type_env
                                (fast defn, List.map snd (sand defn), trad defn))
                            !eqlist)))
               then
-                raise (Non_exhaustive_pattern_matching placeholder_loc)
+                raise (NonExhaustivePatternMatching placeholder_loc)
               else curr_defined := "";
               eqlist := []
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
 
 let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
   (* on vérifie que la fonction n'est pas déjà définie ailleurs *)
-  if Smaps.mem fdecl.name !function_env then (raise (Ident_used_twice (placeholder_loc, fdecl.name)))
+  if Smaps.mem fdecl.name !function_env then (raise (IdentUsedTwice (placeholder_loc, fdecl.name)))
   else if not (no_same_name fdecl.variables) then
-    raise (Similar_names (placeholder_loc, "variables"))
+    raise (SimilarNames (placeholder_loc, "variables"))
   else
     let var_type_env =
       List.fold_left
@@ -653,7 +654,7 @@ let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
     in
     let type_env =
       Smaps.union
-        (fun _ _ _ -> raise (Similar_names (placeholder_loc, "patterns")))
+        (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "patterns")))
         type_env var_type_env
     in
     let instance_env =
@@ -673,9 +674,8 @@ let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
       instance_env )
 
 and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
-  if
-    deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
-  then raise (Double_definition (placeholder_loc, (fast defn)))
+  if deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
+  then raise (DoubleDefinition (placeholder_loc, (fast defn)))
   else (
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
@@ -687,7 +687,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
           {
             bindings =
               Smaps.union
-                (fun _ _ _ -> raise (Similar_names (placeholder_loc, "bindings")))
+                (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "bindings")))
                 a.bindings envi.bindings;
             fvars = Vset.union a.fvars envi.fvars;
           })
@@ -696,7 +696,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
     let type_env =
       if deflist then
         Smaps.union
-          (fun _ _ _ -> raise (Similar_names (placeholder_loc, "variables")))
+          (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "variables")))
           type_env
           (scnd (smaps_find (fast defn) !function_env))
       else type_env
@@ -709,9 +709,9 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
     then typing_error placeholder_loc "mauvais type de retour")
 
 and typ_data global_env type_env instance_env (data : data) =
-  if Smaps.mem data.name !type_env then raise (Already_defined (placeholder_loc, "Un type", data.name))
+  if Smaps.mem data.name !type_env then raise (AlreadyDefined (placeholder_loc, "Un type", data.name))
   else if not (no_same_name data.params) then
-    raise (Similar_names (placeholder_loc, "variables"))
+    raise (SimilarNames (placeholder_loc, "variables"))
   else
     let tau = TCons (data.name, []) in
     type_env := Smaps.add data.name (tau, List.length data.params) !type_env;
@@ -722,13 +722,13 @@ and typ_data global_env type_env instance_env (data : data) =
     in
     let real_type_env =
       Smaps.union
-        (fun _ _ _ -> raise (Similar_names (placeholder_loc, "variables")))
+        (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "variables")))
         var_type_env !type_env
     in
     let rec add_cons = function
       | [] -> ()
       | (i, al) :: t ->
-          if Smaps.mem i !cons_env then raise (Already_defined (placeholder_loc, "Un constructeur", data.name))
+          if Smaps.mem i !cons_env then raise (AlreadyDefined (placeholder_loc, "Un constructeur", data.name))
           else
             cons_env :=
               Smaps.add i
@@ -747,7 +747,7 @@ and typ_data global_env type_env instance_env (data : data) =
     add_cons data.types; 
 
 and typ_class global_env type_env instance_env (clas : clas) =
-  if Smaps.mem clas.name !class_env then raise (Already_defined (placeholder_loc, "Une classe", clas.name))
+  if Smaps.mem clas.name !class_env then raise (AlreadyDefined (placeholder_loc, "Une classe", clas.name))
   else
     let class_functions = ref Smaps.empty in
     List.iter
@@ -804,7 +804,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
-  if Smaps.mem (fst n) instance_env then raise (Double_definition (placeholder_loc, (fst n)))
+  if Smaps.mem (fst n) instance_env then raise (DoubleDefinition (placeholder_loc, (fst n)))
   else
       let cons_id = fst n in
       let sl, class_functions, fl = smaps_find cons_id !class_env in
@@ -820,7 +820,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
       let type_env = add_ntype_list type_env nl in
       let type_env = add_atype type_env (snd n) in
       let instance_env = add_instance instance_env type_env nl in
-      let aux tl1 tl2 = if unify tl1 tl2 then raise (Unifiable_instances placeholder_loc) in
+      let aux tl1 tl2 = if unify tl1 tl2 then raise (UnifiableInstances placeholder_loc) in
       List.iter
         (aux (List.map (ast_atype global_env type_env instance_env) (snd n)))
         (List.map fst (smaps_find (fst n) !global_env_instances));
@@ -880,7 +880,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
                     (exhaustive_list global_env type_env instance_env
                        [ sub (List.nth tl c) ]
                        (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
-                then (raise (Non_exhaustive_pattern_matching (placeholder_loc))))
+                then (raise (NonExhaustivePatternMatching (placeholder_loc))))
         | _ -> failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
       in
 
