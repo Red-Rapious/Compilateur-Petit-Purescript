@@ -301,8 +301,7 @@ let rec typ_exp global_env type_env
                 not
                   (typ_eq tau
                      (typ_branch global_env type_env instance_env t global x))
-              then raise (Typing_error (fst e, "mauvais type"))
-              else ())
+              then raise (Typing_error (fst e, "mauvais type")))
             tail;
           if
             not
@@ -445,7 +444,7 @@ and compat_instances instance_env cident id instances tlist global =
     | tl :: q -> find_valid tlist q
   in
   find_valid variables instances
-(*Il fallait juste renvoyer unit, le but était de vérifier que ça n'explose pas*)
+(*Il fallait juste renvoyer unit, le but était de vérifier que ça n'explose pas 🤯 *)
 
 and typ_atom global_env type_env instance_env global (l, a) =
   match a with
@@ -708,8 +707,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
         (typ_eq
            (typ_exp global_env type_env instance_env deflist (trad defn))
            t)
-    then typing_error placeholder_loc "mauvais type de retour"
-    else ())
+    then typing_error placeholder_loc "mauvais type de retour")
 
 and typ_data global_env type_env instance_env (data : data) =
   if Smaps.mem data.name !type_env then raise (Already_defined (placeholder_loc, "Un type", data.name))
@@ -884,8 +882,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
                     (exhaustive_list global_env type_env instance_env
                        [ sub (List.nth tl c) ]
                        (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
-                then (raise (Non_exhaustive_pattern_matching placeholder_loc))
-                else ())
+                then (raise (Non_exhaustive_pattern_matching placeholder_loc)))
         | _ -> failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
       in
 
