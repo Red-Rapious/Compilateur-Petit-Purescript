@@ -151,9 +151,9 @@ let () =
       eprintf "Définition vide.@." ;
       exit 1
 
-    | Double_definition loc ->
+    | Double_definition (loc, id) ->
       double_localisation loc ;
-      eprintf "Définition double.@." ;
+      eprintf "Définition double de '%s'.@." id;
       exit 1
 
     | Already_defined (loc, obj_name, id) ->

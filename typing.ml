@@ -14,7 +14,7 @@ exception Ident_used_twice of loc * string
 exception Multiple_filtering of loc
 exception Similar_names of loc * string
 exception Empty_definition of loc
-exception Double_definition of loc
+exception Double_definition of loc * string
 exception Already_defined of loc * string * string (* loc * nom de l'objet * nom spécifique déjà défini *)
 exception Unifiable_instances of loc
 exception MissingDefinition of loc
@@ -617,7 +617,7 @@ let verify_def global_env type_env
     | h :: t -> (
         let col = no_dups false 0 (List.map snd (sand h)) in
         if col = -1 then (
-          if List.length !eqlist > 1 then (raise (Double_definition placeholder_loc))
+          if List.length !eqlist > 1 then (raise (Double_definition (placeholder_loc, fast h)))
           else curr_defined := "";
           eqlist := [])
         else
@@ -641,6 +641,7 @@ let verify_def global_env type_env
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
 
 let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
+  (* on vérifie que la fonction n'est pas déjà définie ailleurs *)
   if Smaps.mem fdecl.name !function_env then (raise (Ident_used_twice (placeholder_loc, fdecl.name)))
   else if not (no_same_name fdecl.variables) then
     raise (Similar_names (placeholder_loc, "variables"))
@@ -674,7 +675,7 @@ let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
 and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
   if
     deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
-  then raise (Double_definition placeholder_loc)
+  then raise (Double_definition (placeholder_loc, (fast defn)))
   else (
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
@@ -803,7 +804,7 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
-  if Smaps.mem (fst n) instance_env then raise (Double_definition placeholder_loc)
+  if Smaps.mem (fst n) instance_env then raise (Double_definition (placeholder_loc, (fst n)))
   else
       let cons_id = fst n in
       let sl, class_functions, fl = smaps_find cons_id !class_env in
@@ -850,7 +851,6 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
         | _ -> false
       in
 
-      (* NE SERAIT-CE PAS JUSTE LA FONCTION FILTER DE LIST ? *)
       let rec filter s = function
         | [] -> []
         | defn :: q when fast defn = s -> defn :: filter s q
@@ -894,7 +894,6 @@ and typ_instance global_env type_env instance_env (dinst : instance * defn list)
 
       let requirements = requires nl in
       Smaps.iter (fun id t -> check_exhaust id t) class_functions;
-      (* JE SUIS VRAIMENT PAS SÛR QUE CE SOIT [id] *)
       global_env_instances :=
         Smaps.add (fst n)
           (( List.map (ast_atype global_env type_env instance_env) (snd n),
