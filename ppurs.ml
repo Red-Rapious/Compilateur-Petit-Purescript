@@ -8,13 +8,15 @@ let type_only = ref false
 
 (* Nom du fichier source *)
 let ifile = ref ""
+let ofile = ref ""
 
 let set_file f s = f := s
 
 (* Les options du compilateur que l'on affiche avec --help *)
 let options =
   ["--parse-only", Arg.Set parse_only, "  Réaliser uniquement la phase d'analyse syntaxique";
-  "--type-only", Arg.Set type_only, " Réaliser uniquement l'analyse syntaxique et sémantique"
+  "--type-only", Arg.Set type_only, " Réaliser uniquement l'analyse syntaxique et sémantique";
+  "-o", Arg.String (set_file ofile), "<file>  Pour indiquer le nom du fichier de sortie"
   ]
 
 let usage = "usage: ppurs [options] file.purs"
@@ -61,6 +63,10 @@ let () =
     exit 1
   end;
 
+  (* Par défaut, le fichier cible a le même nom que le fichier source, 
+  seule l'extension change *)
+  if !ofile="" then ofile := Filename.chop_suffix !ifile ".exp" ^ ".s";
+
   (* Ouverture du fichier source en lecture *)
   let f = open_in !ifile in
 
@@ -78,11 +84,12 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    ignore (typ_file program);
+    let tp = typ_file program in
     if program.module_name <> "Main" then
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
-    failwith "La production de code n'est pas implémentée pour l'instant"
+
+    Compile.compile_program tp !ofile
   with
     (* Erreur lexicale *)
     | Lexer.Lexing_error c ->

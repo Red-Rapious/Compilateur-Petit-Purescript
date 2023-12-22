@@ -1,4 +1,5 @@
-# Compilateur-Petit-Purescript
+# Compilateur Petit Purescript
+Ceci est le compilateur Petit Purescript réalisé par Matthieu Boyer et Antoine Groudiev, pour le projet du cours "Langages de Programmation et Compilation" de 2023-2024.
 
 ## Exécution
 - La commande `make` créé le compilateur, nommé `ppurs`, à la racine du projet.
