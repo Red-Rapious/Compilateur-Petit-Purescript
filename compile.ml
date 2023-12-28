@@ -4,20 +4,38 @@ open Ast
 
 exception VarUndef of string
 
-let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
-
 module Smap = Map.Make(String)
-
 type local_env = ident Smap.t
 
-let alloc_decl = function 
-| Defn d -> failwith "alloc_decl: todo"
-| _ -> failwith "alloc_decl: todo"
+let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
+
+
+(* Décoration de l'AST avec l'allocation des variables *)
+(* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
+let rec alloc_decl = function 
+| Defn d -> alloc_defn d
+| Dfdecl d -> alloc_fdecl d
+| Ddata d -> alloc_data d
+| Dclass c -> alloc_class c
+| Dinstance (instance, dlist) -> List.iter alloc_defn dlist
+
+and alloc_defn (i, l, e) = ()
+and alloc_expr (env: local_env) (fpcur: int) = function 
+| Eatom a -> alloc_atom env fpcur (snd a)
+| _ -> ()
+and alloc_atom (env: local_env) (fpcur: int) = function 
+| Aconst c -> ()
+| _ -> ()
+and alloc_branch (env: local_env) (fpcur: int) b = ()
+and alloc_binding (env: local_env) (fpcur: int) b = ()
+and alloc_fdecl fdecl = ()
+and alloc_data data = ()
+and alloc_class c = ()
 
 let alloc = List.map alloc_decl
 
-
-let compile_decl (codefun, codemain) = failwith "compile_decl: todo"
+(* Production du code *)
+let compile_decl (codefun, codemain) d = nop, nop
 
 let compile_program p ofile =
   let p = alloc p in
@@ -33,6 +51,7 @@ let compile_program p ofile =
         movq (imm 0) !%rax ++ (* exit *)
         ret ++
 
+        (* Afficheur d'entiers *)
         label "print_int" ++
         movq !%rdi !%rsi ++
         movq (ilab ".Sprint_int") !%rdi ++
@@ -40,6 +59,8 @@ let compile_program p ofile =
         call "printf" ++
         ret ++
 
+        (* On ajoute un afficheur de booléens au code produit,
+           même si on a pas besoin d'afficher de booléens *)
         label "print_bool" ++
         cmpq (imm 0) !%rdi ++
         je ".Lfalse" ++
