@@ -10,13 +10,19 @@ module Smap = Map.Make(String)
 
 type local_env = ident Smap.t
 
-let compile_stmt = failwith "todo"
-let alloc = fun _ -> failwith "todo"
+let alloc_decl = function 
+| Defn d -> failwith "alloc_decl: todo"
+| _ -> failwith "alloc_decl: todo"
+
+let alloc = List.map alloc_decl
+
+
+let compile_decl (codefun, codemain) = failwith "compile_stmt: todo"
 
 let compile_program p ofile =
   let p = alloc p in
   (*Format.eprintf "%a@." print p;*)
-  let codefun, code = List.fold_left compile_stmt (nop, nop) p in
+  let codefun, code = List.fold_left compile_decl (nop, nop) p in
   let p =
     { text =
         globl "main" ++ label "main" ++

@@ -84,12 +84,12 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    let tp = typ_file program in
+    let () = typ_file program in
     if program.module_name <> "Main" then
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
 
-    Compile.compile_program tp !ofile
+    Compile.compile_program program.main !ofile
   with
     (* Erreur lexicale *)
     | Lexer.Lexing_error c ->

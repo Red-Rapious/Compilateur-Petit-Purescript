@@ -93,6 +93,9 @@ type constr = {
   cenvvartyps : (ttyp * int) Smaps.t;
 }
 
+type type_env = (ttyp * int) Smaps.t
+type instance_env = (ttyp list * (ident * ttyp list) list) list Smaps.t
+
 let rec unify tl1 tl2 =
   let assoc = ref Smaps.empty in
   let rec aux tl1 tl2 =
@@ -525,7 +528,7 @@ and ast_ntype global_env type_env instance_env (id, al) =
         TCons (s, List.map (ast_atype global_env type_env instance_env) al)
     | _ -> t
 
-and exhaustive_list global_env type_env instance_env tlist pllist =
+and exhaustive_list global_env (type_env : type_env) (instance_env : instance_env) (tlist : ttyp list) (pllist : pattern list list) =
   let rec is_ident = function
     | Parg (l, Pident s) when is_lower s -> true
     | Parg (l, Ppattern p) -> is_ident p
@@ -582,8 +585,8 @@ let fast (a, b, c) = a
 let sand (a, b, c) = b
 let trad (a, b, c) = c
 
-let verify_def global_env type_env
-    (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
+(* TODO: vérifier pourquoi global_env n'est pas inféré en type ('a) *)
+let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
   let rec is_ident = function
     | Pident s -> true
     | Ppattern (Parg (l, p)) -> is_ident p
@@ -637,7 +640,7 @@ let verify_def global_env type_env
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
 
 (* Typage d'une déclaration de fonction *)
-let rec typ_fdecl global_env type_env instance_env (fdecl : fdecl) =
+let rec typ_fdecl (global_env : envs) (type_env : type_env) (instance_env : instance_env) (fdecl : fdecl) =
   (* on vérifie que la fonction n'est pas déjà définie ailleurs *)
   if Smaps.mem fdecl.name !function_env then (raise (IdentUsedTwice (placeholder_loc, fdecl.name)))
   else if not (no_same_name fdecl.variables) then
@@ -707,7 +710,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
 
 
 (* Typage d'une déclaration "data" *)
-and typ_data global_env type_env instance_env (data : data) =
+and typ_data (global_env : envs) (type_env : type_env ref) (instance_env : instance_env) (data : data) =
   if Smaps.mem data.name !type_env then raise (AlreadyDefined (placeholder_loc, "Un type", data.name))
   else if not (no_same_name data.params) then
     raise (SimilarNames (placeholder_loc, "variables"))
@@ -746,7 +749,7 @@ and typ_data global_env type_env instance_env (data : data) =
     add_cons data.types; 
 
 (* Typage d'une classe *)
-and typ_class global_env type_env instance_env (clas : clas) =
+and typ_class (global_env : envs) (type_env : type_env) (instance_env : instance_env) (clas : clas) =
   if Smaps.mem clas.name !class_env then raise (AlreadyDefined (placeholder_loc, "Une classe", clas.name))
   else
     let class_functions = ref Smaps.empty in
@@ -775,7 +778,7 @@ and typ_class global_env type_env instance_env (clas : clas) =
          class_env := Smaps.add clas.name (clas.params, !class_functions, []) !class_env;
          global_env_instances := Smaps.add clas.name [] !global_env_instances
 
-and add_atype type_env = function
+and add_atype (type_env : type_env) = function
   | Tident s :: q when is_lower s ->
       Smaps.add s (TAlias s, 0) (add_atype type_env q)
   | Tident _ :: q -> add_atype type_env q
@@ -785,7 +788,7 @@ and add_atype type_env = function
         (add_atype type_env q) (add_ast_type type_env t)
   | [] -> type_env
 
-and add_ast_type type_env = function
+and add_ast_type (type_env : type_env) = function
   | Tatype a -> add_atype type_env [ a ]
   | Tntype n -> add_ntype type_env n
 
@@ -800,7 +803,7 @@ and add_ntype_list type_env = function
         (add_ntype_list Smaps.empty q)
 
 (* Typage d'une instance *)
-and typ_instance global_env type_env instance_env (dinst : instance * defn list) =
+and typ_instance global_env (type_env : type_env) (instance_env : instance_env) (dinst : instance * defn list) =
   match fst dinst with
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
@@ -922,8 +925,7 @@ and typ_file f =
   if not (Smaps.mem "main" !function_env) then raise MissingMain
 
 (* Typage d'une déclaration *)
-and typ_declaration global_env type_env
-    (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
+and typ_declaration global_env (type_env : type_env ref) (instance_env : instance_env) =
   function
   | Dfdecl fdecl ->
       verify_def !global_env_instances !type_env instance_env;
