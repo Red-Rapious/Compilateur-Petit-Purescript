@@ -17,7 +17,7 @@ let alloc_decl = function
 let alloc = List.map alloc_decl
 
 
-let compile_decl (codefun, codemain) = failwith "compile_stmt: todo"
+let compile_decl (codefun, codemain) = failwith "compile_decl: todo"
 
 let compile_program p ofile =
   let p = alloc p in
@@ -27,19 +27,41 @@ let compile_program p ofile =
     { text =
         globl "main" ++ label "main" ++
         movq !%rsp !%rbp ++
+
         code ++
+
         movq (imm 0) !%rax ++ (* exit *)
         ret ++
+
         label "print_int" ++
         movq !%rdi !%rsi ++
         movq (ilab ".Sprint_int") !%rdi ++
         movq (imm 0) !%rax ++
         call "printf" ++
         ret ++
+
+        label "print_bool" ++
+        cmpq (imm 0) !%rdi ++
+        je ".Lfalse" ++
+        movq (ilab "true") !%rdi ++
+        jmp ".Lprint" ++
+
+        label ".Lfalse" ++
+        movq (ilab "false") !%rdi ++
+
+        label ".Lprint" ++
+        movq (imm 0) !%rax ++
+        call "printf" ++
+        ret ++
+
         codefun;
       data =
         Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) genv
-          (label ".Sprint_int" ++ string "%d\n")
+          begin
+            label ".Sprint_int" ++ string "%d\n" ++
+            label "true" ++ string "true\n" ++
+            label "false" ++ string "false\n"
+          end
     }
   in
   let f = open_out ofile in

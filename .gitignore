@@ -4,3 +4,5 @@ _build
 *.exe
 ppurs
 *.ocamlformat
+*.s
+*.out
