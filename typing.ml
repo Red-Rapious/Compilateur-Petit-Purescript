@@ -147,8 +147,7 @@ let rec no_same_name = function
   | [] -> true
   | h :: t -> (not (List.mem h t)) && no_same_name t
 
-let string_to_list s = List.init (String.length s) (String.get s)
-let is_lower s = List.mem s.[0] (string_to_list "abcdefghijklmnopqrstuvwxyz")
+let is_lower s = s = String.lowercase_ascii s
 let frst (a, b, c, d) = a
 let scnd (a, b, c, d) = b
 let thrd (a, b, c, d) = c
@@ -536,7 +535,7 @@ and exhaustive_list global_env (type_env : type_env) (instance_env : instance_en
   in
   let rec is_bool b = function
     | Parg (l, Pconst (Cbool x)) -> x = b
-    | Parg (l, Ppattern p) -> is_bool b p (* à vérifier *)
+    | Parg (l, Ppattern p) -> is_bool b p
     | _ -> false
   in
   let rec is_cons c = function
