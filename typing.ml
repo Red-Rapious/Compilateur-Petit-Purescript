@@ -921,11 +921,13 @@ and typ_file (f:file) : tfile =
            (TCons ("Effect", [ TUnit ]), 1);
          ])
   in
-  List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
+  let tmain = List.map (typ_declaration global_env type_env !global_env_instances) f.main in
   verify_def global_env !type_env !global_env_instances ; 
   if not (Smaps.mem "main" !function_env) then raise MissingMain ;
   (* programme typé renvoyé *)
-  { tmodule_name=f.module_name; tmain=[] }
+  { tmodule_name=f.module_name; tmain }
+
+and placeholder_tdecl = TDefn ("", [], TEatom (TAconst (Cbool true)))
 
 (* Typage d'une déclaration *)
 and typ_declaration global_env (type_env : type_env ref) (instance_env : instance_env) =
@@ -936,18 +938,23 @@ and typ_declaration global_env (type_env : type_env ref) (instance_env : instanc
         typ_fdecl global_env !type_env Smaps.empty fdecl
       in
       function_env :=
-        Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env
+        Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env ; 
+        placeholder_tdecl
   | Defn defn -> (
       match frst (smaps_find (fast defn) !function_env) with
       | TArrow (tlist, t) ->
-          typ_defn global_env !type_env !global_env_instances true defn tlist t
+          typ_defn global_env !type_env !global_env_instances true defn tlist t ;
+          placeholder_tdecl
       | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow")
   | Ddata data ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_data global_env type_env instance_env data
+      verify_def !global_env_instances !type_env instance_env ;
+      typ_data global_env type_env instance_env data ;
+      placeholder_tdecl
   | Dclass clas ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_class global_env !type_env instance_env clas
+      verify_def !global_env_instances !type_env instance_env ;
+      typ_class global_env !type_env instance_env clas ;
+      placeholder_tdecl
   | Dinstance (inst, dlist) ->
-      verify_def !global_env_instances !type_env instance_env;
-      typ_instance global_env !type_env instance_env (inst, dlist)
+      verify_def !global_env_instances !type_env instance_env ;
+      typ_instance global_env !type_env instance_env (inst, dlist) ;
+      placeholder_tdecl

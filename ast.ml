@@ -145,3 +145,5 @@ type tdecl =
 | TDinstance of instance * (tdefn list)
 
 type tfile = { tmodule_name: string ; tmain : tdecl list }
+
+(* AST généré après l'allocation des variables *)
