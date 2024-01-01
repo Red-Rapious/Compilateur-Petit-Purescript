@@ -904,7 +904,8 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env) 
           !global_env_instances
 
 (* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
-and typ_file f =
+and typ_file (f:file) : tfile =
+  (* TODO : reconstruire l'AST typé *)
   let global_env = add false "unit" TUnit empty in
   let type_env =
     ref
@@ -922,7 +923,9 @@ and typ_file f =
   in
   List.iter (typ_declaration global_env type_env !global_env_instances) f.main;
   verify_def global_env !type_env !global_env_instances ; 
-  if not (Smaps.mem "main" !function_env) then raise MissingMain
+  if not (Smaps.mem "main" !function_env) then raise MissingMain ;
+  (* programme typé renvoyé *)
+  { tmodule_name=f.module_name; tmain=[] }
 
 (* Typage d'une déclaration *)
 and typ_declaration global_env (type_env : type_env ref) (instance_env : instance_env) =

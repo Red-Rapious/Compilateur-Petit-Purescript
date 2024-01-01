@@ -13,18 +13,18 @@ let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
 (* Décoration de l'AST avec l'allocation des variables *)
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl = function 
-| Defn d -> alloc_defn d
-| Dfdecl d -> alloc_fdecl d
-| Ddata d -> alloc_data d
-| Dclass c -> alloc_class c
-| Dinstance (instance, dlist) -> List.iter alloc_defn dlist
+| TDefn d -> alloc_defn d
+| TDfdecl d -> alloc_fdecl d
+| TDdata d -> alloc_data d
+| TDclass c -> alloc_class c
+| TDinstance (instance, dlist) -> List.iter alloc_defn dlist
 
 and alloc_defn (i, l, e) = ()
 and alloc_expr (env: local_env) (fpcur: int) = function 
-| Eatom a -> alloc_atom env fpcur (snd a)
+| TEatom a -> alloc_atom env fpcur a
 | _ -> ()
 and alloc_atom (env: local_env) (fpcur: int) = function 
-| Aconst c -> ()
+| TAconst c -> ()
 | _ -> ()
 and alloc_branch (env: local_env) (fpcur: int) b = ()
 and alloc_binding (env: local_env) (fpcur: int) b = ()
@@ -37,7 +37,7 @@ let alloc = List.map alloc_decl
 (* Production du code *)
 let compile_decl (codefun, codemain) d = nop, nop
 
-let compile_program p ofile =
+let compile_program (p : tdecl list) ofile =
   let p = alloc p in
   (*Format.eprintf "%a@." print p;*)
   let codefun, code = List.fold_left compile_decl (nop, nop) p in
@@ -48,7 +48,8 @@ let compile_program p ofile =
 
         code ++
 
-        movq (imm 0) !%rax ++ (* exit *)
+        (* Exit *)
+        movq (imm 0) !%rax ++
         ret ++
 
         (* Afficheur d'entiers *)

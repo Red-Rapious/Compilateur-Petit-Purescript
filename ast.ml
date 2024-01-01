@@ -19,6 +19,7 @@ type binop =
 
 type unop = Uneg
 
+(* AST généré par l'analyse syntaxique *)
 type constant = Cbool of bool | Cstring of string | Cint of int
 
 type atype = 
@@ -98,6 +99,7 @@ and clas = {
 
 type file = { module_name: string ; main : decl list }
 
+(* Types pour le typage *)
 type ttyp =
   | TUnit
   | TBool
@@ -109,3 +111,37 @@ type ttyp =
   | TAlias of string
 
 and tvar = { id : int; mutable def : ttyp option }
+
+(* AST généré par le typage *)
+type texpr =
+| TEatom of tatom
+| TEunop of unop * texpr * ttyp
+| TEbinop of texpr * binop * texpr * ttyp
+| TEfunc of ident * (tatom list)
+| TEif of texpr * texpr * texpr
+| TEdo of texpr list
+| TElet of tbinding list * texpr
+| TEcase of texpr * (tbranch list)
+and tatom =
+| TAconst of constant 
+| TAident of ident 
+| TAexpr of texpr * ttyp
+
+and tbranch = pattern * texpr
+
+and tbinding = ident * texpr
+
+type tdefn = ident * patarg list * texpr
+
+type tdecl = 
+| TDefn of tdefn
+(* 
+  les lignes ci-dessous sont peut-être à ajuster pour des versions
+  typées de data, class, instance
+*)
+| TDfdecl of fdecl
+| TDdata of data
+| TDclass of clas
+| TDinstance of instance * (tdefn list)
+
+type tfile = { tmodule_name: string ; tmain : tdecl list }

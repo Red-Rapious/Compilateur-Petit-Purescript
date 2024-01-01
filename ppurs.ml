@@ -6,7 +6,7 @@ open Typing
 let parse_only = ref false
 let type_only = ref false
 
-(* Nom du fichier source *)
+(* Nom des fichiers input et output *)
 let ifile = ref ""
 let ofile = ref ""
 
@@ -84,12 +84,12 @@ let () =
     (* On s'arrête ici si on ne veut faire que le parsing *)
     if !parse_only then exit 0;
     
-    let () = typ_file program in
-    if program.module_name <> "Main" then
+    let typed_file = typ_file program in
+    if typed_file.tmodule_name <> "Main" then
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
 
-    Compile.compile_program program.main !ofile
+    Compile.compile_program typed_file.tmain !ofile
   with
     (* Erreur lexicale *)
     | Lexer.Lexing_error c ->
