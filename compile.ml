@@ -2,35 +2,64 @@ open Format
 open X86_64
 open Ast
 
-exception VarUndef of string
+exception UndefIdent of string
 
 module Smap = Map.Make(String)
-type local_env = ident Smap.t
+type local_env = int Smap.t
 
 let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
 
 
 (* Décoration de l'AST avec l'allocation des variables *)
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
-let rec alloc_decl = function 
+let rec alloc_decl (decl:tdecl) : adecl =
+match decl with
 | TDefn d -> alloc_defn d
 | TDfdecl d -> alloc_fdecl d
 | TDdata d -> alloc_data d
 | TDclass c -> alloc_class c
-| TDinstance (instance, dlist) -> List.iter alloc_defn dlist
+| TDinstance (instance, dlist) -> failwith ""
 
-and alloc_defn (i, l, e) = ()
+and alloc_defn (ident, plist, expr) : adecl = 
+  let env = ref Smap.empty in 
+  let patargs = [] in 
+  let a_expr, size = alloc_expr !env 0 expr in 
+  ADefn (ident, patargs, a_expr, size)
 and alloc_expr (env: local_env) (fpcur: int) = function 
 | TEatom a -> alloc_atom env fpcur a
-| _ -> ()
+| TEbinop (e1, op, e2, t) -> 
+  let e1', fpcur1 = alloc_expr env fpcur e1 in 
+  let e2', fpcur2 = alloc_expr env fpcur e2 in
+  AEbinop(e1', op, e2', t), max fpcur1 fpcur2
+| TEif (e1, e2, e3) ->
+  let e1', fpcur1 = alloc_expr env fpcur e1 in 
+  let e2', fpcur2 = alloc_expr env fpcur e2 in 
+  let e3', fpcur3 = alloc_expr env fpcur e3 in 
+  AEif (e1', e2', e3'), max (max fpcur1 fpcur2) fpcur3
+| _ -> failwith ""
 and alloc_atom (env: local_env) (fpcur: int) = function 
-| TAconst c -> ()
-| _ -> ()
-and alloc_branch (env: local_env) (fpcur: int) b = ()
-and alloc_binding (env: local_env) (fpcur: int) b = ()
-and alloc_fdecl fdecl = ()
-and alloc_data data = ()
-and alloc_class c = ()
+| TAconst (c, t) -> AEatom (alloc_const t fpcur c), fpcur
+| TAexpr (e, t) -> alloc_expr env fpcur e (* warning: on drop le type ? quel type choisir entre celui de l'atome et celui de l'expression ? *)
+| TAident (ident, t) -> begin
+  match ident with
+  | "unit" -> AEatom (AAconst (Cbool (true), t)), fpcur
+  | _ -> 
+    begin
+      match Smap.find_opt ident env with
+      | Some c -> AEatom (AAident (c, t)), fpcur
+      | None -> raise (UndefIdent ident)
+    end
+  end
+
+and alloc_branch (env: local_env) (fpcur: int) b = failwith ""
+and alloc_binding (env: local_env) (fpcur: int) b = failwith ""
+and alloc_fdecl fdecl = failwith ""
+and alloc_data data = failwith ""
+and alloc_class c = failwith ""
+and alloc_const t fpcur = function
+| Cbool b -> AAconst (Cbool b, t)
+| Cstring s -> AAconst (Cstring s, t)
+| Cint x -> AAconst (Cint x, t)
 
 let alloc = List.map alloc_decl
 

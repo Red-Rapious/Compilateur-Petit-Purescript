@@ -123,8 +123,8 @@ type texpr =
 | TElet of tbinding list * texpr
 | TEcase of texpr * (tbranch list)
 and tatom =
-| TAconst of constant 
-| TAident of ident 
+| TAconst of constant * ttyp
+| TAident of ident * ttyp
 | TAexpr of texpr * ttyp
 
 and tbranch = pattern * texpr
@@ -147,3 +147,35 @@ type tdecl =
 type tfile = { tmodule_name: string ; tmain : tdecl list }
 
 (* AST généré après l'allocation des variables *)
+type frame_size = int
+
+type aexpr =
+| AEatom of aatom
+| AEunop of unop * aexpr * ttyp
+| AEbinop of aexpr * binop * aexpr * ttyp
+| AEfunc of ident * (tatom list) * frame_size
+| AEif of aexpr * aexpr * aexpr
+| AEdo of aexpr list * ttyp * frame_size
+| AElet of tbinding list * aexpr
+| AEcase of aexpr * (tbranch list)
+and aatom =
+| AAconst of constant * ttyp
+| AAident of int * ttyp (* adresse, type *)
+| AAexpr of aexpr * ttyp * frame_size
+
+and abranch = pattern * aexpr
+
+and abinding = ident * aexpr
+
+type adefn = ident * patarg list * aexpr * frame_size
+
+type adecl = 
+| ADefn of adefn
+(* 
+  les lignes ci-dessous sont peut-être à ajuster pour des versions
+  custom de data, class, instance
+*)
+| ADfdecl of fdecl
+| ADdata of data
+| ADclass of clas
+| ADinstance of instance * (adefn list)
