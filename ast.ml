@@ -153,11 +153,11 @@ type aexpr =
 | AEatom of aatom * ttyp * int
 | AEunop of unop * aexpr * ttyp * int
 | AEbinop of aexpr * binop * aexpr * ttyp *int
-| AEfunc of ident * (tatom list) * int
+| AEfunc of ident * (aatom list) * ttyp * int
 | AEif of aexpr * aexpr * aexpr * ttyp * int
 | AEdo of aexpr list * ttyp * int
 | AElet of tbinding list * aexpr * ttyp * int
-| AEcase of aexpr * (tbranch list) * ttyp * int
+| AEcase of aexpr * (abranch list) * ttyp * int
 and aatom =
 | AAconst of constant * ttyp * int
 | AAident of ttyp * int(* adresse, type *)

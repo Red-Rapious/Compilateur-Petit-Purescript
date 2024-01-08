@@ -97,6 +97,40 @@ and compile_expr = function
 | AEatom (at, t, ad) -> 
   compile_atom at ++
   movq2idx (address_of_aatom at) rbp ad rbp
+| AEfunc (name, params, types, ad) -> 
+  (* production du code de calcul des paramètres *)
+  List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
+
+  (* on stocke les paramètres *)
+  (* s'il y a un nombre impair de paramètres, on rajoute un immédiat nul *)
+  if ((List.length params) mod 2) = 1 then pushq (imm 0) else nop ++
+  List.fold_left (fun code atom ->
+    pushq (ind ~ofs:(address_of_aatom atom) rbp) ++ code
+  ) nop params ++
+
+  (* si la fonction appelée est 'show', on la remplace par la fonction
+    codée en assembleur qui correspond au type à afficher *)
+  call begin match name with
+  | "show" -> begin
+      match type_of_aatom (List.hd params) with 
+      | TInt -> "print_int"
+      | TBool -> "print_bool"
+      | _ -> failwith "unsupported show"
+    end
+  | _ -> name
+  end ++
+
+  (* on pop les arguments *)
+  List.fold_left (
+    fun code atom -> 
+    (* TODO *)
+    code ++ popq r8
+  ) nop params ++
+
+  (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
+  if ((List.length params) mod 2) = 1 then popq r8 else nop ++
+  movq (reg rax) (ind ~ofs:ad rbp)
+
 | _ -> failwith ""
 
 and compile_atom = function 
