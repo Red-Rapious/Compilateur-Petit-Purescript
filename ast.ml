@@ -118,7 +118,7 @@ type texpr =
 | TEunop of unop * texpr * ttyp
 | TEbinop of texpr * binop * texpr * ttyp
 | TEfunc of ident * (tatom list)
-| TEif of texpr * texpr * texpr
+| TEif of texpr * texpr * texpr * ttyp
 | TEdo of texpr list
 | TElet of tbinding list * texpr
 | TEcase of texpr * (tbranch list)
@@ -150,18 +150,18 @@ type tfile = { tmodule_name: string ; tmain : tdecl list }
 type frame_size = int
 
 type aexpr =
-| AEatom of aatom
-| AEunop of unop * aexpr * ttyp
-| AEbinop of aexpr * binop * aexpr * ttyp
-| AEfunc of ident * (tatom list) * frame_size
-| AEif of aexpr * aexpr * aexpr
-| AEdo of aexpr list * ttyp * frame_size
-| AElet of tbinding list * aexpr
-| AEcase of aexpr * (tbranch list)
+| AEatom of aatom * ttyp * int
+| AEunop of unop * aexpr * ttyp * int
+| AEbinop of aexpr * binop * aexpr * ttyp *int
+| AEfunc of ident * (tatom list) * int
+| AEif of aexpr * aexpr * aexpr * ttyp * int
+| AEdo of aexpr list * ttyp * int
+| AElet of tbinding list * aexpr * ttyp * int
+| AEcase of aexpr * (tbranch list) * ttyp * int
 and aatom =
-| AAconst of constant * ttyp
-| AAident of int * ttyp (* adresse, type *)
-| AAexpr of aexpr * ttyp * frame_size
+| AAconst of constant * ttyp * int
+| AAident of ttyp * int(* adresse, type *)
+| AAexpr of aexpr * ttyp * int
 
 and abranch = pattern * aexpr
 

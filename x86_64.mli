@@ -165,6 +165,7 @@ val movb: [`B] operand -> [`B] operand -> text
 val movw: [`W] operand -> [`W] operand -> text
 val movl: [`L] operand -> [`L] operand -> text
 val movq: [`Q] operand -> [`Q] operand -> text
+val movq2idx :  int -> [`Q] register -> int -> [`Q] register -> text 
   (** attention : toutes les combinaisons d'opérandes ne sont pas permises *)
 
 val movsbw: [`B] operand -> [`W] register -> text
@@ -271,6 +272,7 @@ val sarq: [`Q] operand -> [`Q] operand -> text
 val call: label -> text
 val call_star: [`Q] operand -> text
 val leave: text
+val enter: [`Q] operand -> text
 val ret: text
   (** appel de fonction et retour *)
 

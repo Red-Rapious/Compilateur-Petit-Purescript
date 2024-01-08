@@ -143,6 +143,14 @@ let movw a b = ins "movw %a, %a" a () b ()
 let movl a b = ins "movl %a, %a" a () b ()
 let movq a b = ins "movq %a, %a" a () b ()
 
+let movq2idx ofs1 reg1 ofs2 reg2 =
+  if (reg1 = reg2) && (ofs1 = ofs2) then nop
+  else 
+          let a = ind ~ofs:ofs1 reg1 in
+          let b = ind ~ofs:ofs2 reg2 in
+          ins "movq %a, %a" a () (reg rax) () ++ ins "movq %a, %a" (reg rax) () b ()
+
+
 let movabsq a b = ins "movabsq %a, %s" a () b
 
 let movsbw a b = ins "movsbw %a, %s" a () b
@@ -236,6 +244,7 @@ let jmp_star o = ins "jmp *%a" o ()
 let call (z: label) = ins "call %a" mangle z
 let call_star z = ins "call *%a" z ()
 let leave = ins "leave"
+let enter a = ins "enter %a, $0" a ()
 let ret = ins "ret"
 
 let je (z: label) = ins "je %a" mangle z
