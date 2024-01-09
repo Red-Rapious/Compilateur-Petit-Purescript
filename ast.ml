@@ -117,7 +117,7 @@ type texpr =
 | TEatom of tatom
 | TEunop of unop * texpr * ttyp
 | TEbinop of texpr * binop * texpr * ttyp
-| TEfunc of ident * (tatom list)
+| TEfunc of ident * (tatom list) * ttyp
 | TEif of texpr * texpr * texpr * ttyp
 | TEdo of texpr list
 | TElet of tbinding list * texpr
@@ -131,7 +131,19 @@ and tbranch = pattern * texpr
 
 and tbinding = ident * texpr
 
-type tdefn = ident * patarg list * texpr
+and tfdecl = {
+  tname: ident;
+  tvariables: ident list;
+  tntypes: ntype list;
+  ttypes: ttyp list;
+  tout_type: ttyp
+}
+
+and tpatarg = 
+| TPconst of constant
+| TPident of ident
+
+type tdefn = ident * tpatarg list * texpr
 
 type tdecl = 
 | TDefn of tdefn
@@ -139,7 +151,7 @@ type tdecl =
   les lignes ci-dessous sont peut-être à ajuster pour des versions
   typées de data, class, instance
 *)
-| TDfdecl of fdecl
+| TDfdecl of tfdecl
 | TDdata of data
 | TDclass of clas
 | TDinstance of instance * (tdefn list)
@@ -156,7 +168,7 @@ type aexpr =
 | AEfunc of ident * (aatom list) * ttyp * int
 | AEif of aexpr * aexpr * aexpr * ttyp * int
 | AEdo of aexpr list * ttyp * int
-| AElet of tbinding list * aexpr * ttyp * int
+| AElet of abinding list * aexpr * ttyp * int
 | AEcase of aexpr * (abranch list) * ttyp * int
 and aatom =
 | AAconst of constant * ttyp * int
@@ -167,7 +179,19 @@ and abranch = pattern * aexpr
 
 and abinding = ident * aexpr
 
-type adefn = ident * patarg list * aexpr * frame_size
+and afdecl = {
+  aname: ident;
+  avariables: ident list;
+  antypes: ntype list;
+  atypes: ttyp list;
+  aout_type: ttyp
+}
+
+and apatarg = 
+| APconst of constant * int
+| APident of ident * int
+
+type adefn = ident * apatarg list * aexpr * frame_size
 
 type adecl = 
 | ADefn of adefn
@@ -175,7 +199,7 @@ type adecl =
   les lignes ci-dessous sont peut-être à ajuster pour des versions
   custom de data, class, instance
 *)
-| ADfdecl of fdecl
+| ADfdecl of afdecl
 | ADdata of data
 | ADclass of clas
 | ADinstance of instance * (adefn list)

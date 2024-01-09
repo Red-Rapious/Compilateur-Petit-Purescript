@@ -19,13 +19,26 @@ match decl with
 | TDfdecl d -> alloc_fdecl d
 | TDdata d -> alloc_data d
 | TDclass c -> alloc_class c
-| TDinstance (instance, dlist) -> failwith ""
+| TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
 
 and alloc_defn (ident, plist, expr) : adecl = 
   let env = ref Smap.empty in 
-  let patargs = [] in 
+  let fpcur = ref 0 in
+
+  let patargs =
+    List.map (fun patarg ->
+      let apatarg = alloc_patarg !fpcur patarg in
+      fpcur := !fpcur + 8 ;
+      (match apatarg with
+      | APident (ident, adr) -> env := Smap.add ident adr !env 
+      | _ -> ()) ;
+      apatarg
+    ) plist
+  in
+
   let a_expr, size = alloc_expr !env 0 expr in 
   ADefn (ident, patargs, a_expr, size)
+
 and alloc_expr (env: local_env) (fpcur: int) = function 
 | TEatom a -> alloc_atom env fpcur a
 | TEbinop (e1, op, e2, t) -> 
@@ -37,7 +50,17 @@ and alloc_expr (env: local_env) (fpcur: int) = function
   let e2', fpcur2 = alloc_expr env fpcur e2 in 
   let e3', fpcur3 = alloc_expr env fpcur e3 in 
   AEif (e1', e2', e3', t, fpcur), max (max fpcur1 fpcur2) fpcur3
-| _ -> failwith ""
+| TEfunc (name, args, t) ->
+  (* TODO: UPDATE FPCUR *)
+  let aargs = List.map (fun x -> 
+    (* Très moche *)
+    match fst (alloc_atom env fpcur x) with
+    | AEatom (a, _, _) -> a 
+    | _ -> failwith "une expression devant contenir un atome ne contient pas d'atome"
+    ) args in 
+  AEfunc (name, aargs, t, fpcur), fpcur
+| _ -> failwith "alloc_expr: todo"
+
 and alloc_atom (env: local_env) (fpcur: int) = function 
 (* WARNING ATTENTION TODO : augmenter fpcur *)
 | TAconst (c, t) -> AEatom (alloc_const t fpcur c, t, fpcur), fpcur
@@ -53,11 +76,22 @@ and alloc_atom (env: local_env) (fpcur: int) = function
     end
   end
 
-and alloc_branch (env: local_env) (fpcur: int) b = failwith ""
-and alloc_binding (env: local_env) (fpcur: int) b = failwith ""
-and alloc_fdecl fdecl = failwith ""
-and alloc_data data = failwith ""
-and alloc_class c = failwith ""
+and alloc_patarg fpcur p = 
+match p with 
+| TPconst c -> APconst (c, fpcur)
+| TPident i -> APident (i, fpcur)
+
+and alloc_branch (env: local_env) (fpcur: int) b = failwith "alloc_branch: todo"
+and alloc_binding (env: local_env) (fpcur: int) b = failwith "alloc_binding: tood"
+and alloc_fdecl fdecl = ADfdecl {
+  aname = fdecl.tname ;
+  avariables = fdecl.tvariables;
+  antypes = fdecl.tntypes;
+  atypes = fdecl.ttypes;
+  aout_type = fdecl.tout_type
+}
+and alloc_data data = failwith "alloc_data: todo"
+and alloc_class c = failwith "alloc_class: todo"
 and alloc_const t fpcur = function
 | Cbool b -> AAconst (Cbool b, t, fpcur)
 | Cstring s -> AAconst (Cstring s, t, fpcur)
@@ -76,7 +110,8 @@ let hardcoded_strings = ref []
 
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
-| _ -> failwith ""
+| ADfdecl d -> nop
+| _ -> failwith "compile_decl: todo"
 
 and compile_defn (ident, patargs, expr, size) = 
   label ident ++
@@ -86,7 +121,7 @@ and compile_defn (ident, patargs, expr, size) =
   begin 
     match type_of_aexpr expr with
     | TUnit | TCons ("Effect", [TUnit]) -> movq (imm 0) (reg rax)
-    | _ -> failwith "unsupported type l87"
+    | _ -> failwith "unsupported type of defn to compile"
   end
   ++
 
@@ -103,7 +138,7 @@ and compile_expr = function
 
   (* on stocke les paramètres *)
   (* s'il y a un nombre impair de paramètres, on rajoute un immédiat nul *)
-  if ((List.length params) mod 2) = 1 then pushq (imm 0) else nop ++
+  (if ((List.length params) mod 2) = 1 then pushq (imm 0) else nop) ++
   List.fold_left (fun code atom ->
     pushq (ind ~ofs:(address_of_aatom atom) rbp) ++ code
   ) nop params ++
@@ -131,7 +166,7 @@ and compile_expr = function
   if ((List.length params) mod 2) = 1 then popq r8 else nop ++
   movq (reg rax) (ind ~ofs:ad rbp)
 
-| _ -> failwith ""
+| _ -> failwith "compile_expr: todo"
 
 and compile_atom = function 
 | AAexpr (expr, t, a) -> 
@@ -147,7 +182,7 @@ and compile_atom = function
   (* sinon, on l'ajoute au segment data, et on renvoie un label *)
   | Cstring s -> 
     let str_label = "hardcoded_string_"^(string_of_int !str_counter) in 
-    hardcoded_strings := (!str_counter, s) :: !hardcoded_strings ;
+    hardcoded_strings := (str_label, s) :: !hardcoded_strings ;
     incr str_counter ;
     (ilab str_label)
   in
@@ -158,10 +193,24 @@ let compile_program (p : tdecl list) ofile =
   let p = alloc p in
   (*Format.eprintf "%a@." print p;*)
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in
+  
+  let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) genv
+  begin
+    label ".Sprint_int" ++ string "%d\n" ++
+    label ".Sprint_string" ++ string "%s\n" ++
+    label "true" ++ string "true\n" ++
+    label "false" ++ string "false\n" ++
+    List.fold_left (fun code (label_name, str) ->
+      code ++ label label_name ++ string (str^"\n")
+    ) nop !hardcoded_strings
+  end
+  in
+
+  
   let p =
     { text =
-        globl "main" ++ label "main" ++
-        movq !%rsp !%rbp ++
+        globl "main" ++ (*label "main" ++
+        movq !%rsp !%rbp ++*)
 
         code ++
 
@@ -170,11 +219,34 @@ let compile_program (p : tdecl list) ofile =
         ret ++*)
 
         (* Afficheur d'entiers *)
-        label "print_int" ++
-        movq !%rdi !%rsi ++
+        (*movq !%rdi !%rsi ++
         movq (ilab ".Sprint_int") !%rdi ++
-        movq (imm 0) !%rax ++
+        movq (imm 0) !%rax ++*)
+
+        label "print_int" ++
+        enter (imm 0) ++
+        movq (imm 24) (reg rdi) ++
+        call "malloc" ++
+        movq (reg rax) (reg rdi) ++
+        movq (ilab ".Sprint_int") (reg rsi) ++
+        xorq (reg rax) (reg rax) ++
+        movq (ind ~ofs:16 rbp) (reg rdx) ++
+        call "sprintf" ++
+        movq (reg rax) (reg r8) ++
+        movq (reg rdi) (reg rax) ++
+        subq (reg r8) (reg rax) ++
+        addq (reg rax) (reg r8) ++  (* to remove the last character *)
+        movb (imm 0) (ind ~ofs:(-1) r8) ++
+        leave ++
+        ret ++
+
+        label "log" ++
+        enter (imm 0) ++
+        movq (ind ~ofs:16 rbp) (reg rsi) ++
+        movq (ilab ".Sprint_string") (reg rdi) ++
+        xorq (reg rax) (reg rax) ++
         call "printf" ++
+        leave ++
         ret ++
 
         (* On ajoute un afficheur de booléens au code produit,
@@ -194,13 +266,7 @@ let compile_program (p : tdecl list) ofile =
         ret ;
 
         (*codefun;*)
-      data =
-        Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) genv
-          begin
-            label ".Sprint_int" ++ string "%d\n" ++
-            label "true" ++ string "true\n" ++
-            label "false" ++ string "false\n"
-          end
+      data = data
     }
   in
   let f = open_out ofile in

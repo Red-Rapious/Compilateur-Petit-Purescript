@@ -13,7 +13,7 @@ clean:
 	rm _build -d -r
 
 test: ppurs
-	./ppurs --type-only test.purs
+	./ppurs test.purs
 
 tests:
 	@echo "'make tests' n'est pas une commande valide. Essayez 'make tests1', 'make tests2', ou 'make tests3'."

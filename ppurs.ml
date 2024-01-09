@@ -1,6 +1,7 @@
 open Format
 open Lexing
 open Typing
+open Ast
 
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
@@ -89,6 +90,27 @@ let () =
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
 
+    (* TEST *)
+    let typed_file = {
+      tmodule_name = "Main";
+      tmain = [
+        TDfdecl ({
+          tname = "main";
+          tvariables = [];
+          tntypes = [];
+          ttypes = [];
+          tout_type = TCons ("Effect", [TUnit])
+        });
+        TDefn (
+          "main", [], TEfunc ("log", [TAconst (Cstring "hello, world!", TStr)], TCons ("Effect", [TUnit]))
+          (*"main", [], TEfunc (
+            "log",
+            [TAexpr (TEfunc ("show", [TAconst (Cint 0, TInt)], TStr), TStr)],
+            TCons ("Effect", [TUnit])
+          )*)
+        )
+      ]
+    } in
     Compile.compile_program typed_file.tmain !ofile
   with
     (* Erreur lexicale *)
