@@ -102,12 +102,12 @@ let () =
           tout_type = TCons ("Effect", [TUnit])
         });
         TDefn (
-          "main", [], TEfunc ("log", [TAconst (Cstring "hello, world!", TStr)], TCons ("Effect", [TUnit]))
-          (*"main", [], TEfunc (
+          (*"main", [], TEfunc ("log", [TAconst (Cstring "hello, world!", TStr)], TCons ("Effect", [TUnit]))*)
+          "main", [], TEfunc (
             "log",
             [TAexpr (TEfunc ("show", [TAconst (Cint 42, TInt)], TStr), TStr)],
             TCons ("Effect", [TUnit])
-          )*)
+          )
         )
       ]
     } in

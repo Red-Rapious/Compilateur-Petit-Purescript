@@ -16,7 +16,7 @@ let create_neg_fpcur () =
   (fun () -> fpcur := !fpcur - 8 ; !fpcur)
 
 let create_pos_fpcur () =
-  let fpcur = ref 1 in 
+  let fpcur = ref 8 in 
   (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
 (* Décoration de l'AST avec l'allocation des variables *)
@@ -43,9 +43,9 @@ and alloc_defn (ident, plist, expr) : adecl =
     ) plist
   in
 
-  let fpcur = create_neg_fpcur () in
-  let a_expr = alloc_expr !env fpcur expr in 
-  ADefn (ident, patargs, a_expr, abs (fpcur ()))
+  let fpcur' = create_neg_fpcur () in
+  let a_expr = alloc_expr !env fpcur' expr in 
+  ADefn (ident, patargs, a_expr, abs (fpcur' ()))
 
 and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
@@ -69,7 +69,7 @@ and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function
 | TAconst (c, t) -> AAconst (c, t, fpcur ())
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr env fpcur e in 
-  AAexpr (aexpr, t, fpcur ())
+  AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> begin
   match ident with
   | "unit" -> AAconst (Cbool (true), t, fpcur ())
@@ -164,7 +164,7 @@ and compile_expr = function
   ) nop params ++
 
   (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
-  if ((List.length params) mod 2) = 1 then popq r8 else nop ++
+  (if ((List.length params) mod 2) = 1 then popq r8 else nop) ++
   movq (reg rax) (ind ~ofs:ad rbp)
 
 | _ -> failwith "compile_expr: todo"
