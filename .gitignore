@@ -6,3 +6,4 @@ ppurs
 *.ocamlformat
 *.s
 *.out
+local

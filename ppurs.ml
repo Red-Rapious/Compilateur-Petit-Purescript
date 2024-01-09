@@ -105,7 +105,7 @@ let () =
           "main", [], TEfunc ("log", [TAconst (Cstring "hello, world!", TStr)], TCons ("Effect", [TUnit]))
           (*"main", [], TEfunc (
             "log",
-            [TAexpr (TEfunc ("show", [TAconst (Cint 0, TInt)], TStr), TStr)],
+            [TAexpr (TEfunc ("show", [TAconst (Cint 42, TInt)], TStr), TStr)],
             TCons ("Effect", [TUnit])
           )*)
         )

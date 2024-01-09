@@ -9,7 +9,15 @@ module Smap = Map.Make(String)
 type local_env = int Smap.t
 
 let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
+type tfpcur = (unit -> int)
 
+let create_neg_fpcur () = 
+  let fpcur = ref 0 in 
+  (fun () -> fpcur := !fpcur - 8 ; !fpcur)
+
+let create_pos_fpcur () =
+  let fpcur = ref 1 in 
+  (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
 (* Décoration de l'AST avec l'allocation des variables *)
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
@@ -22,13 +30,12 @@ match decl with
 | TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
 
 and alloc_defn (ident, plist, expr) : adecl = 
+  let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
-  let fpcur = ref 0 in
 
   let patargs =
     List.map (fun patarg ->
-      let apatarg = alloc_patarg !fpcur patarg in
-      fpcur := !fpcur + 8 ;
+      let apatarg = alloc_patarg fpcur patarg in
       (match apatarg with
       | APident (ident, adr) -> env := Smap.add ident adr !env 
       | _ -> ()) ;
@@ -36,53 +43,51 @@ and alloc_defn (ident, plist, expr) : adecl =
     ) plist
   in
 
-  let a_expr, size = alloc_expr !env 0 expr in 
-  ADefn (ident, patargs, a_expr, size)
+  let fpcur = create_neg_fpcur () in
+  let a_expr = alloc_expr !env fpcur expr in 
+  ADefn (ident, patargs, a_expr, abs (fpcur ()))
 
-and alloc_expr (env: local_env) (fpcur: int) = function 
-| TEatom a -> alloc_atom env fpcur a
+and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
+| TEatom (a, t) -> 
+  let aatom = alloc_atom env fpcur a
+  in AEatom(aatom, t, fpcur ())
 | TEbinop (e1, op, e2, t) -> 
-  let e1', fpcur1 = alloc_expr env fpcur e1 in 
-  let e2', fpcur2 = alloc_expr env fpcur e2 in
-  AEbinop(e1', op, e2', t, fpcur), max fpcur1 fpcur2
+  let e1' = alloc_expr env fpcur e1 in 
+  let e2' = alloc_expr env fpcur e2 in
+  AEbinop(e1', op, e2', t, fpcur ())
 | TEif (e1, e2, e3, t) ->
-  let e1', fpcur1 = alloc_expr env fpcur e1 in 
-  let e2', fpcur2 = alloc_expr env fpcur e2 in 
-  let e3', fpcur3 = alloc_expr env fpcur e3 in 
-  AEif (e1', e2', e3', t, fpcur), max (max fpcur1 fpcur2) fpcur3
+  let e1' = alloc_expr env fpcur e1 in 
+  let e2' = alloc_expr env fpcur e2 in 
+  let e3' = alloc_expr env fpcur e3 in 
+  AEif (e1', e2', e3', t, fpcur ())
 | TEfunc (name, args, t) ->
-  (* TODO: UPDATE FPCUR *)
-  let aargs = List.map (fun x -> 
-    (* Très moche *)
-    match fst (alloc_atom env fpcur x) with
-    | AEatom (a, _, _) -> a 
-    | _ -> failwith "une expression devant contenir un atome ne contient pas d'atome"
-    ) args in 
-  AEfunc (name, aargs, t, fpcur), fpcur
+  let aargs = List.map (fun x -> alloc_atom env fpcur x) args in 
+  AEfunc (name, aargs, t, fpcur ())
 | _ -> failwith "alloc_expr: todo"
 
-and alloc_atom (env: local_env) (fpcur: int) = function 
-(* WARNING ATTENTION TODO : augmenter fpcur *)
-| TAconst (c, t) -> AEatom (alloc_const t fpcur c, t, fpcur), fpcur
-| TAexpr (e, t) -> alloc_expr env fpcur e (* warning: on drop le type ? quel type choisir entre celui de l'atome et celui de l'expression ? *)
+and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
+| TAconst (c, t) -> AAconst (c, t, fpcur ())
+| TAexpr (e, t) -> 
+  let aexpr = alloc_expr env fpcur e in 
+  AAexpr (aexpr, t, fpcur ())
 | TAident (ident, t) -> begin
   match ident with
-  | "unit" -> AEatom (AAconst (Cbool (true), t, fpcur), t, fpcur), fpcur
+  | "unit" -> AAconst (Cbool (true), t, fpcur ())
   | _ -> 
     begin
       match Smap.find_opt ident env with
-      | Some c -> AEatom (AAident (t, c), t, fpcur), fpcur
+      | Some c -> AAident (t, c)
       | None -> raise (UndefIdent ident)
     end
   end
 
 and alloc_patarg fpcur p = 
 match p with 
-| TPconst c -> APconst (c, fpcur)
-| TPident i -> APident (i, fpcur)
+| TPconst c -> APconst (c, fpcur ())
+| TPident i -> APident (i, fpcur ())
 
-and alloc_branch (env: local_env) (fpcur: int) b = failwith "alloc_branch: todo"
-and alloc_binding (env: local_env) (fpcur: int) b = failwith "alloc_binding: tood"
+and alloc_branch (env: local_env) (fpcur: tfpcur) b = failwith "alloc_branch: todo"
+and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: tood"
 and alloc_fdecl fdecl = ADfdecl {
   aname = fdecl.tname ;
   avariables = fdecl.tvariables;
@@ -92,10 +97,6 @@ and alloc_fdecl fdecl = ADfdecl {
 }
 and alloc_data data = failwith "alloc_data: todo"
 and alloc_class c = failwith "alloc_class: todo"
-and alloc_const t fpcur = function
-| Cbool b -> AAconst (Cbool b, t, fpcur)
-| Cstring s -> AAconst (Cstring s, t, fpcur)
-| Cint x -> AAconst (Cint x, t, fpcur)
 
 let alloc = List.map alloc_decl
 

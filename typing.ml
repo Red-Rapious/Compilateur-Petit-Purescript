@@ -926,7 +926,7 @@ and typ_file (f:file) : tfile =
   (* programme typé renvoyé *)
   { tmodule_name=f.module_name; tmain }
 
-and placeholder_tdecl = TDefn ("", [], TEatom (TAconst (Cbool true, TBool)))
+and placeholder_tdecl = TDefn ("", [], TEatom (TAconst (Cbool true, TBool), TBool))
 
 (* Typage d'une déclaration *)
 and typ_declaration global_env (type_env : type_env ref) (instance_env : instance_env) =
