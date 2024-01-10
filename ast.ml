@@ -115,7 +115,7 @@ and tvar = { id : int; mutable def : ttyp option }
 (* AST généré par le typage *)
 type texpr =
 | TEatom of tatom * ttyp
-| TEunop of unop * texpr * ttyp
+(*| TEunop of unop * texpr * ttyp*) (* plus de unop après le typage *)
 | TEbinop of texpr * binop * texpr * ttyp
 | TEfunc of ident * (tatom list) * ttyp
 | TEif of texpr * texpr * texpr * ttyp

@@ -110,6 +110,7 @@ let round_16 a = match a mod 16 with
 | i -> a + 16-i
 
 let str_counter = ref 0
+let comparaison_count = ref 0
 let hardcoded_strings = ref []
 
 let rec compile_decl = function 
@@ -211,8 +212,40 @@ and compile_binop (e1, binop, e2, t, res_adr) =
     movq (reg r8) (ind ~ofs:res_adr rbp)
   end
 
-and compile_binop_compare (e1, binop, e2, t, a) =
-  failwith "compile_binop_compare: todo"
+and compile_binop_compare (e1, binop, e2, t, ret_adr) = 
+  compile_expr e1 ++
+  compile_expr e2 ++
+  let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
+  let expr_type = type_of_aexpr e1 in
+  match binop with
+  | Blt -> comparaison_code jl a1 a2 ret_adr
+  | Ble -> comparaison_code jle a1 a2 ret_adr
+  | Bgt | Bge -> failwith "la compilation des opérateurs binaire > et >= sont sensés être traités en utilisant la production de code de < et <="
+  | Beq when expr_type = TInt -> comparaison_code je a1 a2 ret_adr
+  | Beq when expr_type = TBool -> comparaison_code je a1 a2 ret_adr
+  | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:ret_adr rbp) (* toujours vrai *)
+  | Beq when expr_type = TStr -> failwith "todo: Beq with TStr"
+  | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
+  | Bneq -> failwith "compile_binop_compare: todo"
+  | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
+and comparaison_code instruction a1 a2 ret_adr =
+  let uid = string_of_int !comparaison_count in 
+  let cmp_is_true = "_cmp_is_true_" ^ uid
+  and cmp_is_false = "_cmp_is_false_" ^ uid in
+  incr comparaison_count ;
+  
+  movq (ind ~ofs:a1 rbp) (reg r13) ++
+  movq (ind ~ofs:a2 rbp) (reg r12) ++
+  cmpq (reg r12) (reg r13) ++
+
+  instruction cmp_is_true ++
+  movq (imm 0) (ind ~ofs:ret_adr rbp) ++
+  jmp cmp_is_false ++
+
+  label cmp_is_true ++
+  movq (imm 1) (ind ~ofs:ret_adr rbp) ++
+  
+  label cmp_is_false
 
 and compile_atom = function 
 | AAexpr (expr, t, res_adr) -> 
