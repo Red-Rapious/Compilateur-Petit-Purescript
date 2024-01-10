@@ -75,7 +75,7 @@ and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function
   AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> begin
   match ident with
-  | "unit" -> AAconst (Cbool (true), t, fpcur ())
+  | "unit" -> AAconst (Cbool (false), t, fpcur ())
   | _ -> 
     begin
       match Smap.find_opt ident env with
@@ -313,11 +313,18 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
-        label ".Lprint" ++
+        (* la fonction pure de purescript *)
+        label "pure" ++
+        enter (imm 0) ++
+        (*movq (imm 0) (reg rax) ++*)
+        leave ++
+        ret
+
+        (*label ".Lprint" ++
         movq (imm 0) !%rax ++
         call "printf" ++
         leave ++
-        ret 
+        ret*)
       ;
       data = data
     }
