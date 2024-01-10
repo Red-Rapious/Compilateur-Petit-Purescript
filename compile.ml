@@ -245,7 +245,10 @@ and compile_binop_compare (e1, binop, e2, t, ret_adr) =
     
     label cmp_is_false
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
-  | Bneq -> failwith "compile_binop_compare: todo"
+  | Bneq -> 
+    compile_binop_compare (e1, Beq, e2, t, ret_adr) ++
+    call "not" ++
+    movq (reg rax) (ind ~ofs:ret_adr rbp)
   | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
 and comparaison_code instruction a1 a2 ret_adr =
   let uid = string_of_int !comparaison_count in 
@@ -343,6 +346,21 @@ let compile_program (p : tdecl list) ofile =
         label "pure" ++
         enter (imm 0) ++
         (*movq (imm 0) (reg rax) ++*)
+        leave ++
+        ret ++
+
+        (* fonction not, qui se trouve être dans Purescript classique *)
+        label "not" ++
+        enter (imm 0) ++
+        movq (ind ~ofs:16 rbp) (reg rax) ++
+        (* si la valeur vaut 0, on la remplace par 1, sinon par 0 *)
+        testq (reg rax) (reg rax) ++
+        jz "_not_0" ++
+        movq (imm 0) (reg rax) ++
+        leave ++
+        ret ++
+        label "_not_0" ++
+        movq (imm 1) (reg rax) ++
         leave ++
         ret ++
 

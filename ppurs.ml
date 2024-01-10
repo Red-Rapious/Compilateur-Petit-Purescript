@@ -151,7 +151,7 @@ let () =
             [
               TAexpr (
               TEfunc ("show", [TAexpr (
-              TEbinop (TEatom (TAconst (Cstring "a", TStr), TStr), Beq, TEatom (TAconst (Cstring "a", TStr), TStr), TBool),
+              TEbinop (TEatom (TAconst (Cstring "a", TStr), TStr), Bneq, TEatom (TAconst (Cstring "a", TStr), TStr), TBool),
               TBool
               )], TStr), TStr)
             ],

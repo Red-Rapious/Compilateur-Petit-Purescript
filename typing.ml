@@ -247,6 +247,7 @@ let rec typ_exp global_env type_env
                ^ "' : les expressions comparées doivent être de type TInt, \
                   String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
+        (* TODO: convertir les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
           match s1 with
           | TInt -> TBool
           | _ ->
