@@ -169,7 +169,7 @@ and compile_expr = function
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
     match binop with
-    | Badd | Bsub | Bmul | Bdiv | Bor | Band ->  compile_binop (e1, binop, e2, t, a)
+    | Badd | Bsub | Bmul | Bdiv | Bor | Band -> compile_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
 | _ -> failwith "compile_expr: todo"
@@ -245,20 +245,10 @@ let compile_program (p : tdecl list) ofile =
   
   let p =
     { text =
-        globl "main" ++ (*label "main" ++
-        movq !%rsp !%rbp ++*)
-
+        globl "main" ++
         code ++
 
-        (* Exit *)
-        (*movq (imm 0) !%rax ++
-        ret ++*)
-
-        (* Afficheur d'entiers *)
-        (*movq !%rdi !%rsi ++
-        movq (ilab ".Sprint_int") !%rdi ++
-        movq (imm 0) !%rax ++*)
-
+        (* afficheur d'entiers *)
         label "print_int" ++
         enter (imm 0) ++
         movq (imm 24) (reg rdi) ++
@@ -276,6 +266,7 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
+        (* fonction log de purescript *)
         label "log" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rsi) ++
@@ -285,8 +276,20 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
-        (* On ajoute un afficheur de booléens au code produit,
-           même si on a pas besoin d'afficher de booléens *)
+        (* fonction mod de purescript *)
+        label "mod" ++
+        enter (imm 0) ++
+        movq (ind ~ofs:16 rbp) (reg rax) ++
+        movq (ind ~ofs:24 rbp) (reg rbx) ++
+        cqto ++ 
+        idivq !%rbx ++
+        (* on met le résultat dans rax, qui sera ensuite 
+           recopié sur la pile par l'instruction suivante (cf. compile_expr)*)
+        movq (reg rdx) (reg rax) ++
+        leave ++
+        ret ++
+
+        (* afficheur de booléen *)
         label "print_bool" ++
         cmpq (imm 0) !%rdi ++
         je ".Lfalse" ++
@@ -299,9 +302,8 @@ let compile_program (p : tdecl list) ofile =
         label ".Lprint" ++
         movq (imm 0) !%rax ++
         call "printf" ++
-        ret ;
-
-        (*codefun;*)
+        ret 
+      ;
       data = data
     }
   in
