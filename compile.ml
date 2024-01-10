@@ -330,8 +330,8 @@ let compile_program (p : tdecl list) ofile =
         (* fonction mod de purescript *)
         (* là encore, la complexité vient du fait que idivq peut retourner 
           un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
-        (* TODO: traiter les cas négatifs *)
-        label "mod" ++
+        (* "l'algorithme" est le même que pour _div *)
+        (*label "mod" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++
         movq (ind ~ofs:24 rbp) (reg rbx) ++
@@ -340,6 +340,43 @@ let compile_program (p : tdecl list) ofile =
         (* on met le résultat dans rax, qui sera ensuite 
            recopié sur la pile par l'instruction suivante (cf. compile_expr)*)
         movq (reg rdx) (reg rax) ++
+        leave ++
+        ret ++*)
+
+        label "mod" ++
+        enter (imm 0) ++
+        movq (ind ~ofs:16 rbp) (reg rax) ++
+        testq (reg rax) (reg rax) ++
+
+        js "_mod_s" ++
+        movq (ind ~ofs:24 rbp) (reg rcx) ++
+        movq (imm 0) (reg rdx) ++
+        idivq (reg rcx) ++
+        movq (reg rdx) (reg rax) ++
+        leave ++
+        ret ++
+
+        label "_mod_s" ++
+        movq (ind ~ofs:24 rbp) (reg rcx) ++
+        movq (imm (-1)) (reg rdx) ++
+        idivq (reg rcx) ++
+        (*testq (reg rdx) (reg rdx) ++*)
+        movq (reg rdx) (reg rax) ++
+        testq (reg rax) (reg rax) ++
+        jz "_mod_0" ++
+        cmpq (imm 0) (ind ~ofs:24 rbp) ++
+        js "_mod_ss" ++
+        addq (ind ~ofs:24 rbp) (reg rax) ++
+        leave ++
+        ret ++
+
+        label "_mod_ss" ++
+        subq (ind ~ofs:24 rbp) (reg rax) ++
+        leave ++
+        ret ++
+
+        label "_mod_0" ++
+        movq (imm 0) (reg rax) ++
         leave ++
         ret ++
 
