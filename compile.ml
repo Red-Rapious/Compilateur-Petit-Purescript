@@ -60,9 +60,12 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
   let e2' = alloc_expr env fpcur e2 in 
   let e3' = alloc_expr env fpcur e3 in 
   AEif (e1', e2', e3', t, fpcur ())
-| TEfunc (name, args, t) ->
-  let aargs = List.map (fun x -> alloc_atom env fpcur x) args in 
+| TEfunc (name, targs, t) ->
+  let aargs = List.map (alloc_atom env fpcur) targs in 
   AEfunc (name, aargs, t, fpcur ())
+| TEdo (expr_list, t) -> 
+  let aexpr_list = List.map (alloc_expr env fpcur) expr_list in
+  AEdo (aexpr_list, t, fpcur ())
 | _ -> failwith "alloc_expr: todo"
 
 and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
@@ -130,10 +133,10 @@ and compile_defn (ident, patargs, expr, fpmax) =
   ret
 
 and compile_expr = function 
-| AEatom (at, t, ad) -> 
+| AEatom (at, t, res_adr) -> 
   compile_atom at ++
-  movq2idx (address_of_aatom at) rbp ad rbp
-| AEfunc (name, params, types, ad) -> 
+  movq2idx (address_of_aatom at) rbp res_adr rbp
+| AEfunc (name, params, types, res_adr) -> 
   (* production du code de calcul des paramètres *)
   List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
 
@@ -165,13 +168,16 @@ and compile_expr = function
 
   (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
   (if ((List.length params) mod 2) = 1 then popq r8 else nop) ++
-  movq (reg rax) (ind ~ofs:ad rbp)
+  movq (reg rax) (ind ~ofs:res_adr rbp)
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
     match binop with
     | Badd | Bsub | Bmul | Bdiv | Bor | Band -> compile_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
+| AEdo (expr_list, t, res_adr) ->
+  List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
+  movq (imm 0) (ind ~ofs:res_adr rbp)
 | _ -> failwith "compile_expr: todo"
 
 and compile_binop (e1, binop, e2, t, a) =
@@ -180,6 +186,7 @@ and compile_binop (e1, binop, e2, t, a) =
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
+    (* TODO: traiter les cas négatifs (cf. arith3.out) *)
     movq (ind ~ofs:a1 rbp) (reg rax) ++
     movq (ind ~ofs:a2 rbp) (reg rbx) ++
     cqto ++ 
@@ -205,11 +212,11 @@ and compile_binop_compare (e1, binop, e2, t, a) =
   failwith "compile_binop_compare: todo"
 
 and compile_atom = function 
-| AAexpr (expr, t, a) -> 
+| AAexpr (expr, t, res_adr) -> 
   let adresse_dest = address_of_aexpr expr in 
   compile_expr expr ++
-  movq2idx adresse_dest rbp a rbp
-| AAconst (c, t, a) -> 
+  movq2idx adresse_dest rbp res_adr rbp
+| AAconst (c, t, res_adr) -> 
   let ptr = match c with
   (* si c'est une constante facile, on la représente par un immédiat *)
   | Cint i -> imm i
@@ -222,7 +229,7 @@ and compile_atom = function
     incr str_counter ;
     (ilab str_label)
   in
-  movq ptr (ind ~ofs:a rbp)
+  movq ptr (ind ~ofs:res_adr rbp)
 | AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
 
 let compile_program (p : tdecl list) ofile =
@@ -277,6 +284,9 @@ let compile_program (p : tdecl list) ofile =
         ret ++
 
         (* fonction mod de purescript *)
+        (* la complexité vient du fait que idivq peut retourner 
+          un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
+        (* TODO: traiter les cas négatifs *)
         label "mod" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++
@@ -291,17 +301,22 @@ let compile_program (p : tdecl list) ofile =
 
         (* afficheur de booléen *)
         label "print_bool" ++
-        cmpq (imm 0) !%rdi ++
+        enter (imm 0) ++
+        cmpq (imm 0) (ind ~ofs:16 rbp) ++
         je ".Lfalse" ++
-        movq (ilab "true") !%rdi ++
-        jmp ".Lprint" ++
-
+        movq (ilab "true") (reg rax) ++
+        leave ++
+        ret ++
+        
         label ".Lfalse" ++
-        movq (ilab "false") !%rdi ++
+        movq (ilab "false") (reg rax) ++
+        leave ++
+        ret ++
 
         label ".Lprint" ++
         movq (imm 0) !%rax ++
         call "printf" ++
+        leave ++
         ret 
       ;
       data = data

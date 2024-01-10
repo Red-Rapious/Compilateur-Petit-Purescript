@@ -119,7 +119,7 @@ type texpr =
 | TEbinop of texpr * binop * texpr * ttyp
 | TEfunc of ident * (tatom list) * ttyp
 | TEif of texpr * texpr * texpr * ttyp
-| TEdo of texpr list
+| TEdo of texpr list * ttyp
 | TElet of tbinding list * texpr
 | TEcase of texpr * (tbranch list)
 and tatom =
