@@ -224,7 +224,26 @@ and compile_binop_compare (e1, binop, e2, t, ret_adr) =
   | Beq when expr_type = TInt -> comparaison_code je a1 a2 ret_adr
   | Beq when expr_type = TBool -> comparaison_code je a1 a2 ret_adr
   | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:ret_adr rbp) (* toujours vrai *)
-  | Beq when expr_type = TStr -> failwith "todo: Beq with TStr"
+  | Beq when expr_type = TStr -> 
+    (* certes, ressemble à comparaison_code, mais on évite un abus de généralité *)
+    let uid = string_of_int !comparaison_count in 
+    let cmp_is_true = "_cmp_is_true_" ^ uid
+    and cmp_is_false = "_cmp_is_false_" ^ uid in
+    incr comparaison_count ;
+    
+    movq (ind ~ofs:a1 rbp) (reg rdi) ++
+    movq (ind ~ofs:a2 rbp) (reg rsi) ++
+    call "strcmp" ++
+    testq (reg rax) (reg rax) ++
+
+    jz cmp_is_true ++
+    movq (imm 0) (ind ~ofs:ret_adr rbp) ++
+    jmp cmp_is_false ++
+
+    label cmp_is_true ++
+    movq (imm 1) (ind ~ofs:ret_adr rbp) ++
+    
+    label cmp_is_false
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
   | Bneq -> failwith "compile_binop_compare: todo"
   | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
@@ -292,7 +311,7 @@ let compile_program (p : tdecl list) ofile =
         code ++
 
         (* afficheur d'entiers *)
-        (* TODO : modifier *)
+        (* TODO : personnaliser *)
         label "print_int" ++
         enter (imm 0) ++
         movq (imm 24) (reg rdi) ++
@@ -319,6 +338,15 @@ let compile_program (p : tdecl list) ofile =
         call "printf" ++
         leave ++
         ret ++
+
+        (* la fonction pure de purescript *)
+        label "pure" ++
+        enter (imm 0) ++
+        (*movq (imm 0) (reg rax) ++*)
+        leave ++
+        ret ++
+
+        (* FONCTIONS UTILITAIRES *)
 
         (* fonction de division *)
         (* la complexité vient du fait que idivq peut retourner 
@@ -424,13 +452,6 @@ let compile_program (p : tdecl list) ofile =
         
         label ".Lfalse" ++
         movq (ilab "false") (reg rax) ++
-        leave ++
-        ret ++
-
-        (* la fonction pure de purescript *)
-        label "pure" ++
-        enter (imm 0) ++
-        (*movq (imm 0) (reg rax) ++*)
         leave ++
         ret
 
