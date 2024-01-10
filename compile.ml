@@ -178,18 +178,28 @@ and compile_binop (e1, binop, e2, t, a) =
   compile_expr e1 ++
   compile_expr e2 ++
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
-  let instruction = match binop with 
-  | Badd -> addq
-  | Bsub -> subq 
-  | Bmul -> imulq
-  | Bdiv -> failwith "compile_binop: div"
-  | Bor -> orq
-  | Band -> andq
-  | _ -> failwith "compile_binop: todo"
-  in 
-  movq (ind ~ofs:a1 rbp) (reg r8) ++
-  instruction (ind ~ofs:a2 rbp) (reg r8) ++
-  movq (reg r8) (ind ~ofs:a rbp)
+  (* le cas de la division est un peu spécial *)
+  if binop = Bdiv then begin
+    movq (ind ~ofs:a1 rbp) (reg rax) ++
+    movq (ind ~ofs:a2 rbp) (reg rbx) ++
+    cqto ++ 
+    idivq !%rbx ++
+    movq (reg rax) (ind ~ofs:a rbp)
+  end
+  else begin
+    (* on choisit l'instruction assembleur correspondant au calcul *)
+    let instruction = match binop with 
+    | Badd -> addq
+    | Bsub -> subq 
+    | Bmul -> imulq
+    | Bor -> orq
+    | Band -> andq
+    | _ -> failwith "ce cas n'est pas sensé se produire"
+    in 
+    movq (ind ~ofs:a1 rbp) (reg r8) ++
+    instruction (ind ~ofs:a2 rbp) (reg r8) ++
+    movq (reg r8) (ind ~ofs:a rbp)
+  end
 
 and compile_binop_compare (e1, binop, e2, t, a) =
   failwith "compile_binop_compare: todo"

@@ -161,10 +161,11 @@ type tfile = { tmodule_name: string ; tmain : tdecl list }
 (* AST généré après l'allocation des variables *)
 type frame_size = int
 
+(* le dernier entier stocke l'adresse du résultat du calcul *)
 type aexpr =
 | AEatom of aatom * ttyp * int
 | AEunop of unop * aexpr * ttyp * int
-| AEbinop of aexpr * binop * aexpr * ttyp *int
+| AEbinop of aexpr * binop * aexpr * ttyp * int
 | AEfunc of ident * (aatom list) * ttyp * int
 | AEif of aexpr * aexpr * aexpr * ttyp * int
 | AEdo of aexpr list * ttyp * int

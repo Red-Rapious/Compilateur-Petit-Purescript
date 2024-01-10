@@ -113,7 +113,7 @@ let () =
             [
               TAexpr (
               TEfunc ("show", [TAexpr (
-              TEbinop (TEatom (TAconst (Cint 22, TInt), TInt), Badd, TEatom (TAconst (Cint 20, TInt), TInt), TInt),
+              TEbinop (TEatom (TAconst (Cint 6, TInt), TInt), Bdiv, TEatom (TAconst (Cint (-3), TInt), TInt), TInt),
               TInt
               )], TStr), TStr)
             ],
