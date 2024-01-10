@@ -180,18 +180,21 @@ and compile_expr = function
   movq (imm 0) (ind ~ofs:res_adr rbp)
 | _ -> failwith "compile_expr: todo"
 
-and compile_binop (e1, binop, e2, t, a) =
+and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
   compile_expr e2 ++
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
-    (* TODO: traiter les cas négatifs (cf. arith3.out) *)
-    movq (ind ~ofs:a1 rbp) (reg rax) ++
+    (*movq (ind ~ofs:a1 rbp) (reg rax) ++
     movq (ind ~ofs:a2 rbp) (reg rbx) ++
     cqto ++ 
     idivq !%rbx ++
-    movq (reg rax) (ind ~ofs:a rbp)
+    movq (reg rax) (ind ~ofs:a rbp)*)
+    pushq (ind ~ofs:a2 rbp) ++
+    pushq (ind ~ofs:a1 rbp) ++
+    call "_div" ++
+    movq (reg rax) (ind ~ofs:res_adr rbp)
   end
   else begin
     (* on choisit l'instruction assembleur correspondant au calcul *)
@@ -205,7 +208,7 @@ and compile_binop (e1, binop, e2, t, a) =
     in 
     movq (ind ~ofs:a1 rbp) (reg r8) ++
     instruction (ind ~ofs:a2 rbp) (reg r8) ++
-    movq (reg r8) (ind ~ofs:a rbp)
+    movq (reg r8) (ind ~ofs:res_adr rbp)
   end
 
 and compile_binop_compare (e1, binop, e2, t, a) =
@@ -256,6 +259,7 @@ let compile_program (p : tdecl list) ofile =
         code ++
 
         (* afficheur d'entiers *)
+        (* TODO : modifier *)
         label "print_int" ++
         enter (imm 0) ++
         movq (imm 24) (reg rdi) ++
@@ -268,7 +272,7 @@ let compile_program (p : tdecl list) ofile =
         movq (reg rax) (reg r8) ++
         movq (reg rdi) (reg rax) ++
         subq (reg r8) (reg rax) ++
-        addq (reg rax) (reg r8) ++  (* to remove the last character *)
+        addq (reg rax) (reg r8) ++  (* pour retirer le dernier charactère *)
         movb (imm 0) (ind ~ofs:(-1) r8) ++
         leave ++
         ret ++
@@ -283,8 +287,48 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
-        (* fonction mod de purescript *)
+        (* fonction de division *)
         (* la complexité vient du fait que idivq peut retourner 
+          un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
+        label "_div" ++
+        enter (imm 0) ++
+        movq (ind ~ofs:16 rbp) (reg rax) ++
+        (* on place les drapeaux pour tester le signe de rax *)
+        testq (reg rax) (reg rax) ++
+        (* si négatif, on appelle la fonction dédiée *)
+        js "_div_s" ++
+        movq (ind ~ofs:24 rbp) (reg rcx) ++
+        movq (imm 0) (reg rdx) ++
+        idivq (reg rcx) ++
+        leave ++
+        ret ++
+
+        label "_div_s" ++
+        movq (ind ~ofs:24 rbp) (reg rcx) ++
+        movq (imm (-1)) (reg rdx) ++
+        idivq (reg rcx) ++
+        (* on teste si rdx est non-nul *)
+        testq (reg rdx) (reg rdx) ++
+        jnz "_div_1" ++
+        leave ++
+        ret ++
+
+        (* si rdx est non-nul *)
+        label "_div_1" ++
+        (* si le quotient est positif, on retire 1 *)
+        cmpq (imm 0) (ind ~ofs:24 rbp) ++
+        jg "_decq_leave" ++
+        incq (reg rax) ++
+        leave ++
+        ret ++
+
+        label "_decq_leave" ++
+        decq (reg rax) ++
+        leave ++
+        ret ++
+
+        (* fonction mod de purescript *)
+        (* là encore, la complexité vient du fait que idivq peut retourner 
           un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
         (* TODO: traiter les cas négatifs *)
         label "mod" ++
