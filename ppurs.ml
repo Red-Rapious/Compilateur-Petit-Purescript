@@ -103,9 +103,20 @@ let () =
         });
         TDefn (
           (*"main", [], TEfunc ("log", [TAconst (Cstring "hello, world!", TStr)], TCons ("Effect", [TUnit]))*)
-          "main", [], TEfunc (
+          (*"main", [], TEfunc (
             "log",
             [TAexpr (TEfunc ("show", [TAconst (Cint 42, TInt)], TStr), TStr)],
+            TCons ("Effect", [TUnit])
+          )*)
+          "main", [], TEfunc (
+            "log",
+            [
+              TAexpr (
+              TEfunc ("show", [TAexpr (
+              TEbinop (TEatom (TAconst (Cint 22, TInt), TInt), Badd, TEatom (TAconst (Cint 20, TInt), TInt), TInt),
+              TInt
+              )], TStr), TStr)
+            ],
             TCons ("Effect", [TUnit])
           )
         )

@@ -114,9 +114,9 @@ let rec compile_decl = function
 | ADfdecl d -> nop
 | _ -> failwith "compile_decl: todo"
 
-and compile_defn (ident, patargs, expr, size) = 
+and compile_defn (ident, patargs, expr, fpmax) = 
   label ident ++
-  enter (imm (round_16 (abs size))) ++
+  enter (imm (round_16 (abs fpmax))) ++
 
   compile_expr expr ++
   begin 
@@ -166,8 +166,33 @@ and compile_expr = function
   (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
   (if ((List.length params) mod 2) = 1 then popq r8 else nop) ++
   movq (reg rax) (ind ~ofs:ad rbp)
-
+| AEbinop (e1, binop, e2, t, a) -> 
+  begin 
+    match binop with
+    | Badd | Bsub | Bmul | Bdiv | Bor | Band ->  compile_binop (e1, binop, e2, t, a)
+    | _ -> compile_binop_compare (e1, binop, e2, t, a)
+  end
 | _ -> failwith "compile_expr: todo"
+
+and compile_binop (e1, binop, e2, t, a) =
+  compile_expr e1 ++
+  compile_expr e2 ++
+  let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
+  let instruction = match binop with 
+  | Badd -> addq
+  | Bsub -> subq 
+  | Bmul -> imulq
+  | Bdiv -> failwith "compile_binop: div"
+  | Bor -> orq
+  | Band -> andq
+  | _ -> failwith "compile_binop: todo"
+  in 
+  movq (ind ~ofs:a1 rbp) (reg r8) ++
+  instruction (ind ~ofs:a2 rbp) (reg r8) ++
+  movq (reg r8) (ind ~ofs:a rbp)
+
+and compile_binop_compare (e1, binop, e2, t, a) =
+  failwith "compile_binop_compare: todo"
 
 and compile_atom = function 
 | AAexpr (expr, t, a) -> 
