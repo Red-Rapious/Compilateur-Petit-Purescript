@@ -211,7 +211,6 @@ let rec typ_exp global_env type_env
   let loc, expr = loc_expr in
   match expr with
   | Eunop (_, e) -> (
-      (* TODO: convertir -e en 0-e avec un binop *)
       match typ_exp global_env type_env instance_env global e with
       | TInt -> TInt
       | _ ->

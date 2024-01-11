@@ -55,6 +55,9 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
   let e1' = alloc_expr env fpcur e1 in 
   let e2' = alloc_expr env fpcur e2 in
   AEbinop(e1', op, e2', t, fpcur ())
+| TEunop (op, e, t) ->
+  let e' = alloc_expr env fpcur e in 
+  AEunop (op, e', t, fpcur ())
 | TEif (e1, e2, e3, t) ->
   let e1' = alloc_expr env fpcur e1 in 
   let e2' = alloc_expr env fpcur e2 in 
@@ -176,6 +179,12 @@ and compile_expr = function
     | Badd | Bsub | Bmul | Bdiv | Bor | Band -> compile_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
+| AEunop (Uneg, aexpr, t, ret_adr) ->
+  compile_expr aexpr ++
+  let eadr = address_of_aexpr aexpr in 
+  movq (imm 0) (reg r8) ++
+  subq (ind ~ofs:eadr rbp) (reg r8) ++
+  movq (reg r8) (ind ~ofs:ret_adr rbp)
 | AEdo (expr_list, t, res_adr) ->
   List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
   movq (imm 0) (ind ~ofs:res_adr rbp)
