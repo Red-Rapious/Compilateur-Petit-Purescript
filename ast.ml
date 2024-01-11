@@ -127,7 +127,9 @@ and tatom =
 | TAident of ident * ttyp
 | TAexpr of texpr * ttyp
 
-and tbranch = pattern * texpr
+
+and tbranch = pattern * texpr 
+(* On conserve le type pattern précédent puisqu'on utilise pas le type des patterns *)
 
 and tbinding = ident * texpr
 
@@ -139,11 +141,17 @@ and tfdecl = {
   tout_type: ttyp
 }
 
-and tpatarg = 
-| TPconst of constant
+type tpatarg = 
+| TPconst of constant  *ttyp
 | TPident of ident
+| TPpattern of pattern
 
-type tdefn = ident * tpatarg list * texpr
+and tpattern = 
+| TParg of tpatarg
+| TPconsarg of ident * (tpatarg list)
+
+
+type tdefn = ident * patarg list * texpr
 
 type tdecl = 
 | TDefn of tdefn

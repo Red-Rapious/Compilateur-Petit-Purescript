@@ -11,7 +11,13 @@ exception MultipleFiltering of loc
 exception SimilarNames of loc * string (* localisation * nom de l'objet *)
 exception EmptyDefinition of loc
 exception DoubleDefinition of loc * string (* localisation * identifiant *)
-exception AlreadyDefined of loc * string * string (* localisation * nom de l'objet * nom spécifique déjà défini *)
+
+exception
+  AlreadyDefined of
+    loc
+    * string
+    * string (* localisation * nom de l'objet * nom spécifique déjà défini *)
+
 exception UnifiableInstances of loc
 exception MissingDefinition of loc
 exception MissingMain
@@ -28,10 +34,8 @@ let rec canon t =
   | TArrow (t1, t2) -> TArrow (List.map canon t1, canon t2)
   | TCons (s, t) -> TCons (s, List.map canon t)
 
-
 let typing_error loc s = raise (TypingError (loc, s))
-
-let placeholder_loc = Lexing.dummy_pos, Lexing.dummy_pos
+let placeholder_loc = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let rec typ_eq t1 t2 =
   match (t1, t2) with
@@ -205,23 +209,41 @@ let rec substitute set t =
   | TCons (s, tlist) -> TCons (s, List.map (substitute set) tlist)
   | _ as t -> t
 
+let personne = function
+  | TEatom (_, t) -> t
+  | TEunop (_, _, t) -> t
+  | TEbinop (_, _, _, t) -> t
+  | TEfunc (_, _, t) -> t
+  | TEif (_, _, _, t) -> t
+  | TEdo (_, t) -> t
+  | TElet (_, _, t) -> t
+  | TEcase (_, _, t) -> t
+
+let boug = function 
+  | TAconst(_, t) -> t
+  | TAident(_, t) -> t
+  | TAexpr(_, t) -> t
+
 let rec typ_exp global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) global
     loc_expr =
   let loc, expr = loc_expr in
   match expr with
-  | Eunop (_, e) -> (
-      match typ_exp global_env type_env instance_env global e with
-      | TInt -> TInt
+  | Eunop (u, e) -> (
+      let k = typ_exp global_env type_env instance_env global e in
+      match personne k with
+      | TInt -> TEunop (u, k, TInt)
       | _ ->
           typing_error (fst e)
-            "mauvais opérande pour l'opérateur unaire '-' : le type attendu est TInt")
+            "mauvais opérande pour l'opérateur unaire '-' : le type attendu \
+             est TInt")
   | Eif (e1, e2, e3) -> (
-      match typ_exp global_env type_env instance_env global e1 with
+      let s1 = typ_exp global_env type_env instance_env global e1 in
+      match personne s1 with
       | TBool ->
           let s2 = typ_exp global_env type_env instance_env global e2 in
           let s3 = typ_exp global_env type_env instance_env global e3 in
-          if typ_eq s2 s3 then s2
+          if typ_eq (personne s2) (personne s3)then TEif (s1, s2, s3, personne s2)
           else
             typing_error (fst e3) "les deux branches doivent être de même type"
       | _ ->
@@ -232,91 +254,92 @@ let rec typ_exp global_env type_env
       let s1 = typ_exp global_env type_env instance_env global e1 in
       let s2 = typ_exp global_env type_env instance_env global e2 in
       let binop_string = Pretty.print_binop op in
-      if s1 <> s2 then
+      if personne s1 <> personne s2 then
         typing_error (fst e2)
           ("mauvais opérande pour '" ^ binop_string
          ^ "' : les deux types doivent être identiques");
       match op with
       | Beq | Bneq -> (
-          match s1 with
-          | TInt | TBool | TStr | TUnit -> TBool
+          match personne s1 with
+          | TInt | TBool | TStr | TUnit -> TEbinop (s1, op, s2, TBool)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions comparées doivent être de type TInt, \
                   String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
-        (* TODO: convertir les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
-          match s1 with
-          | TInt -> TBool
+          (* TODO: convertir les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
+          match personne s1 with
+          | TInt -> TEbinop (s1, op, s2, TBool)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions comparées doivent être de type TInt"))
       | Bsub | Badd | Bmul | Bdiv -> (
-          match s1 with
-          | TInt -> TInt
+          match personne s1 with
+          | TInt -> TEbinop (s1, op, s2, TInt)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type TInt"))
       | Bconcat -> (
-          match s1 with
-          | TStr -> TStr
+          match personne s1 with
+          | TStr -> TEbinop (s1, op, s2, TStr)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions concaténées doivent être de type Str"))
       | Band | Bor -> (
-          match s1 with
-          | TBool -> TBool
+          match personne s1 with
+          | TBool -> TEbinop (s1, op, s2, TBool)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
-  | Eatom a -> typ_atom global_env type_env instance_env global a
+  | Eatom a -> let  k = typ_atom global_env type_env instance_env global a in TEatom (k, boug k)
   | Edo l ->
-      List.iter
-        (fun e ->
-          if
-            not
-              (typ_eq
-                 (typ_exp global_env type_env instance_env global e)
-                 (TCons ("Effect", [ TUnit ])))
-          then typing_error (fst e) "le type attendu est Effect Unit")
-        l;
-      TCons ("Effect", [ TUnit ])
+      let l2 =
+        List.map
+          (fun e ->
+            let k = typ_exp global_env type_env instance_env global e in
+            if not (typ_eq (personne k) (TCons ("Effect", [ TUnit ]))) then
+              typing_error (fst e) "le type attendu est Effect Unit";
+            k)
+          l
+      in
+      TEdo (l2, TCons ("Effect", [ TUnit ]))
   | Ecase (e, bl) -> (
       let t = typ_exp global_env type_env instance_env global e in
       match bl with
       | [] -> raise (EmptyPatternMatching (fst e))
       | b :: tail ->
-          let tau = typ_branch global_env type_env instance_env t global b in
+          let tau = typ_branch global_env type_env instance_env (personne t) global b in
           List.iter
             (fun x ->
               if
                 not
-                  (typ_eq tau
-                     (typ_branch global_env type_env instance_env t global x))
+                  (typ_eq (personne (snd tau))
+                     (personne (snd(typ_branch global_env type_env instance_env (personne t) global x))))
               then raise (TypingError (fst e, "mauvais type")))
             tail;
           if
             not
-              (exhaustive_list global_env type_env instance_env [ t ]
+              (exhaustive_list global_env type_env instance_env [ personne t ]
                  (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
           then raise (NonExhaustivePatternMatching (fst e))
-          else tau)
+          else TEcase (t, List.map (fun b -> (typ_branch global_env type_env instance_env (personne t) global b)) bl, personne (snd tau)))
   | Elet (bl, e) ->
       let rec aux global_env type_env instance_env l =
         match l with
         | b :: t ->
             let tau = typ_exp global_env type_env instance_env global (snd b) in
-            aux (add true (fst b) tau global_env) type_env instance_env t
+            aux (add true (fst b) (personne tau) global_env) type_env instance_env t
         | [] -> global_env
       in
-      typ_exp
+      let k = typ_exp
         (aux global_env type_env instance_env bl)
-        type_env instance_env global e
+        type_env instance_env global e in
+      TElet(List.map (fun b ->  fst b, typ_exp global_env type_env instance_env global  (snd b)) bl, k, personne k)
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
@@ -324,13 +347,13 @@ let rec typ_exp global_env type_env
           match (al, tl) with
           | [], [] -> ()
           | h1 :: t1, h2 :: t2 ->
-              if typ_eq (typ_atom global_env type_env instance_env global h1) h2
+              if typ_eq (boug (typ_atom global_env type_env instance_env global h1)) h2
               then aux t1 t2
               else typing_error loc "mauvais types dans le constructeur"
           | _ -> typing_error loc "liste d'arguments de longueur insuffisante"
         in
         aux al constr.ctlist;
-        constr.ctyp)
+        TEfunc(id, List.map (fun a -> typ_atom global_env type_env instance_env global a) al, constr.ctyp))
       else
         try
           let instance_env =
@@ -367,29 +390,30 @@ let rec typ_exp global_env type_env
                       let tau =
                         typ_atom global_env type_env instance_env global a
                       in
-                      match tau with
+                      match boug tau with
                       | TAlias _ -> aux t1 t2
                       | _ ->
                           if
                             Smaps.mem s !vars
-                            && not (typ_eq tau (smaps_find s !vars))
+                            && not (typ_eq (boug tau) (smaps_find s !vars))
                           then typing_error (fst a) "les types sont différents"
-                          else vars := Smaps.add s tau !vars;
+                          else vars := Smaps.add s (boug tau) !vars;
                           aux t1 t2)
                   | _ ->
                       if
                         not
                           (typ_eq t
-                             (typ_atom global_env type_env instance_env global a))
+                             (boug (typ_atom global_env type_env instance_env global a)))
                       then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
               | _ -> raise (TooManyArguments loc)
             in
             aux tlist al;
-            substitute !vars t)
+            TEfunc(id, List.map (typ_atom global_env type_env instance_env global) al,substitute !vars t))
         with Not_found -> raise (UnknownIdent (loc, id)))
 
-and compat_instances instance_env cident id instances tlist global =
+and compat_instances instance_env cident id instances tlist_ global =
+  let tlist = List.map boug tlist_ in 
   let slist, class_functions, functions = smaps_find cident !class_env in
   let ftlist =
     match smaps_find id class_functions with
@@ -401,10 +425,7 @@ and compat_instances instance_env cident id instances tlist global =
     | [], [] -> env
     | TAlias s :: t1, h :: t2 -> Smaps.add s h (consmap env t1 t2)
     | t1 :: q1, t2 :: q2 when typ_eq t1 t2 -> consmap env q1 q2
-    | _ ->
-        typing_error
-          placeholder_loc
-          "appel incompatible avec la définition"
+    | _ -> typing_error placeholder_loc "appel incompatible avec la définition"
   in
   let env = consmap Smaps.empty ftlist tlist in
   let variables = List.map (fun s -> smaps_find s env) slist in
@@ -423,37 +444,35 @@ and compat_instances instance_env cident id instances tlist global =
   let rec all_compatible
       (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) =
     function
-    | [] -> true    
+    | [] -> true
     | (s, tlist) :: q ->
-      compatible tlist (List.map fst (smaps_find s instance_env))
+        compatible tlist (List.map fst (smaps_find s instance_env))
         && all_compatible instance_env q
   in
   let rec find_valid tlist = function
-    | [] ->
-        typing_error
-          placeholder_loc
-          "instances incompatibles"
-    | tl :: q -> if not (
-      (
-        ((not global) && valid (fst tl) tlist)
-        || (global && unify (fst tl) tlist)
-      )
-      && all_compatible instance_env (snd tl)
-    ) then find_valid tlist q
+    | [] -> typing_error placeholder_loc "instances incompatibles"
+    | tl :: q ->
+        if
+          not
+            ((((not global) && valid (fst tl) tlist)
+             || (global && unify (fst tl) tlist))
+            && all_compatible instance_env (snd tl))
+        then find_valid tlist q
   in
   find_valid variables instances
 
 and typ_atom global_env type_env instance_env global (l, a) =
   match a with
   | Aconst c -> (
-      match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr)
+      match c with Cbool _ -> TAconst(c, TBool) | Cint _ -> TAconst(c, TInt) | Cstring _ -> TAconst(c, TStr))
   | Aident id when is_lower id -> (
-      try find id global_env with Not_found -> raise (UnknownIdent (l, id)))
-  | Aident id -> (smaps_find id !cons_env).ctyp
-  | Aexpr e -> typ_exp global_env type_env instance_env global e
+      try TAident(id, find id global_env) with Not_found -> raise (UnknownIdent (l, id)))
+  | Aident id -> TAident(id, (smaps_find id !cons_env).ctyp)
+  | Aexpr e -> let k = typ_exp global_env type_env instance_env global e in TAexpr(typ_exp global_env type_env instance_env global e, personne k)
   | Atypedexpr (e, tau) ->
       let t = ast_type global_env type_env instance_env tau in
-      if typ_eq t (typ_exp global_env type_env instance_env global e) then t
+      let k = typ_exp global_env type_env instance_env global e in 
+      if typ_eq t (personne k) then TAexpr(k, personne k)
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
@@ -466,14 +485,17 @@ and typ_branch global_env type_env instance_env t global branch =
       fvars = Vset.union env_pat.fvars global_env.fvars;
     }
   in
-  typ_exp global_env type_env instance_env global (snd branch)
+  fst branch, typ_exp global_env type_env instance_env global (snd branch)
 
 and typ_pattern global_env type_env instance_env t = function
   | Parg p -> typ_patarg global_env type_env instance_env t p
   | Pconsarg (id, plist) ->
       let cons = smaps_find id !cons_env in
       if not (typ_eq cons.ctyp t) then
-        typing_error (fst (fst (List.hd plist)), snd (fst (List.nth plist ((List.length plist) - 1)))) ("le constructeur '" ^ id ^"' est de mauvais type")
+        typing_error
+          ( fst (fst (List.hd plist)),
+            snd (fst (List.nth plist (List.length plist - 1))) )
+          ("le constructeur '" ^ id ^ "' est de mauvais type")
       else
         let rec aux env plist tlist =
           match (plist, tlist) with
@@ -489,7 +511,8 @@ and typ_pattern global_env type_env instance_env t = function
                 fvars = Vset.union a.fvars env.fvars;
               }
           | _ ->
-              typing_error (fst (List.hd plist))
+              typing_error
+                (fst (List.hd plist))
                 "mauvaise arité pour le constructeur"
         in
         aux global_env plist cons.ctlist
@@ -516,19 +539,24 @@ and ast_type global_env type_env instance_env = function
 and ast_atype global_env type_env instance_env = function
   | Tident s ->
       let t, arity = smaps_find s type_env in
-      if arity = 0 then t else typing_error placeholder_loc ("mauvaise arité du constructeur/type " ^ s)
+      if arity = 0 then t
+      else
+        typing_error placeholder_loc ("mauvaise arité du constructeur/type " ^ s)
   | Ttype t -> ast_type global_env type_env instance_env t
 
 and ast_ntype global_env type_env instance_env (id, al) =
   let t, arity = smaps_find id type_env in
-  if List.length al <> arity then typing_error placeholder_loc ("mauvaise arité du constructeur " ^ id)
+  if List.length al <> arity then
+    typing_error placeholder_loc ("mauvaise arité du constructeur " ^ id)
   else
     match t with
     | TCons (s, _) ->
         TCons (s, List.map (ast_atype global_env type_env instance_env) al)
     | _ -> t
 
-and exhaustive_list global_env (type_env : type_env) (instance_env : instance_env) (tlist : ttyp list) (pllist : pattern list list) =
+and exhaustive_list global_env (type_env : type_env)
+    (instance_env : instance_env) (tlist : ttyp list)
+    (pllist : pattern list list) =
   let rec is_ident = function
     | Parg (l, Pident s) when is_lower s -> true
     | Parg (l, Ppattern p) -> is_ident p
@@ -615,10 +643,10 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
     | h :: t -> (
         let col = no_dups false 0 (List.map snd (sand h)) in
         if col = -1 then (
-          if List.length !eqlist > 1 then (raise (DoubleDefinition (placeholder_loc, fast h)))
+          if List.length !eqlist > 1 then
+            raise (DoubleDefinition (placeholder_loc, fast h))
           else curr_defined := "";
-          eqlist := []
-        )
+          eqlist := [])
         else
           match frst (smaps_find !curr_defined !function_env) with
           | TArrow (tlist, t) ->
@@ -627,22 +655,23 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
                   (exhaustive_list empty type_env instance_env
                      [ List.nth tlist col ]
                      (List.map
-                        (fun x -> [ Parg(placeholder_loc ,x) ])
+                        (fun x -> [ Parg (placeholder_loc, x) ])
                         (List.map
                            (fun defn ->
                              aux col
                                (fast defn, List.map snd (sand defn), trad defn))
                            !eqlist)))
-              then
-                raise (NonExhaustivePatternMatching placeholder_loc)
+              then raise (NonExhaustivePatternMatching placeholder_loc)
               else curr_defined := "";
               eqlist := []
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
 
 (* Typage d'une déclaration de fonction *)
-let rec typ_fdecl (global_env : envs) (type_env : type_env) (instance_env : instance_env) (fdecl : fdecl) =
+let rec typ_fdecl (global_env : envs) (type_env : type_env)
+    (instance_env : instance_env) (fdecl : fdecl) =
   (* on vérifie que la fonction n'est pas déjà définie ailleurs *)
-  if Smaps.mem fdecl.name !function_env then (raise (IdentUsedTwice (placeholder_loc, fdecl.name)))
+  if Smaps.mem fdecl.name !function_env then
+    raise (IdentUsedTwice (placeholder_loc, fdecl.name))
   else if not (no_same_name fdecl.variables) then
     raise (SimilarNames (placeholder_loc, "variables"))
   else
@@ -666,28 +695,37 @@ let rec typ_fdecl (global_env : envs) (type_env : type_env) (instance_env : inst
         instance_env fdecl.ntypes
     in
     curr_defined := fdecl.name;
-    ( TArrow
-        ( List.map (ast_type global_env type_env instance_env) fdecl.types,
-          ast_type global_env type_env instance_env fdecl.out_type ),
-      var_type_env,
-      instance_env )
+    {
+      tname = fdecl.name;
+      tvariables = fdecl.variables;
+      tntypes = fdecl.ntypes;
+      ttypes = List.map (ast_type global_env type_env instance_env) fdecl.types;
+      tout_type = TArrow
+      ( List.map (ast_type global_env type_env instance_env) fdecl.types,
+        ast_type global_env type_env instance_env fdecl.out_type )
+    }
+   , var_type_env,
+      instance_env
 
 (* Typage d'une définition *)
 and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
-  if deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
-  then raise (DoubleDefinition (placeholder_loc, (fast defn)))
+  if
+    deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
+  then raise (DoubleDefinition (placeholder_loc, fast defn))
   else (
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
     let global_env =
-      if List.length plist <> List.length tlist then raise (BadTypesNumber (fst (List.nth plist ((List.length plist) - 1)))) ;
+      if List.length plist <> List.length tlist then
+        raise (BadTypesNumber (fst (List.nth plist (List.length plist - 1))));
       List.fold_right2
         (fun pt t envi ->
           let a = typ_patarg empty type_env instance_env t pt in
           {
             bindings =
               Smaps.union
-                (fun _ _ _ -> raise (SimilarNames (placeholder_loc, "bindings")))
+                (fun _ _ _ ->
+                  raise (SimilarNames (placeholder_loc, "bindings")))
                 a.bindings envi.bindings;
             fvars = Vset.union a.fvars envi.fvars;
           })
@@ -701,17 +739,18 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
           (scnd (smaps_find (fast defn) !function_env))
       else type_env
     in
-    if
-      not
-        (typ_eq
-           (typ_exp global_env type_env instance_env deflist (trad defn))
-           t)
-    then typing_error placeholder_loc "mauvais type de retour")
-
+    let rtexp = typ_exp global_env type_env instance_env deflist (trad defn) in
+    if not (typ_eq (personne rtexp) t) then
+      typing_error placeholder_loc "mauvais type de retour"
+    else
+      fast defn, List.map snd (sand defn), rtexp)
+    
 
 (* Typage d'une déclaration "data" *)
-and typ_data (global_env : envs) (type_env : type_env ref) (instance_env : instance_env) (data : data) =
-  if Smaps.mem data.name !type_env then raise (AlreadyDefined (placeholder_loc, "Un type", data.name))
+and typ_data (global_env : envs) (type_env : type_env ref)
+    (instance_env : instance_env) (data : data) =
+  if Smaps.mem data.name !type_env then
+    raise (AlreadyDefined (placeholder_loc, "Un type", data.name))
   else if not (no_same_name data.params) then
     raise (SimilarNames (placeholder_loc, "variables"))
   else
@@ -730,7 +769,9 @@ and typ_data (global_env : envs) (type_env : type_env ref) (instance_env : insta
     let rec add_cons = function
       | [] -> ()
       | (i, al) :: t ->
-          if Smaps.mem i !cons_env then raise (AlreadyDefined (placeholder_loc, "Un constructeur", data.name))
+          if Smaps.mem i !cons_env then
+            raise
+              (AlreadyDefined (placeholder_loc, "Un constructeur", data.name))
           else
             cons_env :=
               Smaps.add i
@@ -746,11 +787,13 @@ and typ_data (global_env : envs) (type_env : type_env ref) (instance_env : insta
                 !cons_env;
           add_cons t
     in
-    add_cons data.types; 
+    add_cons data.types
 
 (* Typage d'une classe *)
-and typ_class (global_env : envs) (type_env : type_env) (instance_env : instance_env) (clas : clas) =
-  if Smaps.mem clas.name !class_env then raise (AlreadyDefined (placeholder_loc, "Une classe", clas.name))
+and typ_class (global_env : envs) (type_env : type_env)
+    (instance_env : instance_env) (clas : clas) =
+  if Smaps.mem clas.name !class_env then
+    raise (AlreadyDefined (placeholder_loc, "Une classe", clas.name))
   else
     let class_functions = ref Smaps.empty in
     List.iter
@@ -760,10 +803,10 @@ and typ_class (global_env : envs) (type_env : type_env) (instance_env : instance
         in
         curr_defined := "";
         eqlist := [];
-        class_functions := Smaps.add fdecl.name tau !class_functions;
+        class_functions := Smaps.add fdecl.name tau.tout_type !class_functions;
         function_env :=
           Smaps.add fdecl.name
-            (tau, var_env, Some clas.name, inst_env)
+            (tau.tout_type, var_env, Some clas.name, inst_env)
             !function_env)
       (List.map
          (fun { name; variables = vars; ntypes = nl; types = tl; out_type = t } ->
@@ -775,8 +818,9 @@ and typ_class (global_env : envs) (type_env : type_env) (instance_env : instance
              out_type = t;
            })
          clas.decls);
-         class_env := Smaps.add clas.name (clas.params, !class_functions, []) !class_env;
-         global_env_instances := Smaps.add clas.name [] !global_env_instances
+    class_env :=
+      Smaps.add clas.name (clas.params, !class_functions, []) !class_env;
+    global_env_instances := Smaps.add clas.name [] !global_env_instances
 
 and add_atype (type_env : type_env) = function
   | Tident s :: q when is_lower s ->
@@ -803,108 +847,114 @@ and add_ntype_list type_env = function
         (add_ntype_list Smaps.empty q)
 
 (* Typage d'une instance *)
-and typ_instance global_env (type_env : type_env) (instance_env : instance_env) (dinst : instance * defn list) =
+and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
+    (dinst : instance * defn list) =
   match fst dinst with
   | Intype n ->
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
-  if Smaps.mem (fst n) instance_env then raise (DoubleDefinition (placeholder_loc, (fst n)))
-  else
-      let cons_id = fst n in
-      let sl, class_functions, fl = smaps_find cons_id !class_env in
-      let rec add_instance instance_env type_env = function
-        | [] -> instance_env
-        | n :: q ->
-            Smaps.add (fst n)
-              (( List.map (ast_atype global_env type_env instance_env) (snd n),
-                 [] )
-              :: smaps_find (fst n) instance_env)
-              (add_instance instance_env type_env q)
-      in
-      let type_env = add_ntype_list type_env nl in
-      let type_env = add_atype type_env (snd n) in
-      let instance_env = add_instance instance_env type_env nl in
-      let aux tl1 tl2 = if unify tl1 tl2 then raise (UnifiableInstances placeholder_loc) in
-      List.iter
-        (aux (List.map (ast_atype global_env type_env instance_env) (snd n)))
-        (List.map fst (smaps_find (fst n) !global_env_instances));
+      if Smaps.mem (fst n) instance_env then
+        raise (DoubleDefinition (placeholder_loc, fst n))
+      else
+        let cons_id = fst n in
+        let sl, class_functions, fl = smaps_find cons_id !class_env in
+        let rec add_instance instance_env type_env = function
+          | [] -> instance_env
+          | n :: q ->
+              Smaps.add (fst n)
+                (( List.map (ast_atype global_env type_env instance_env) (snd n),
+                   [] )
+                :: smaps_find (fst n) instance_env)
+                (add_instance instance_env type_env q)
+        in
+        let type_env = add_ntype_list type_env nl in
+        let type_env = add_atype type_env (snd n) in
+        let instance_env = add_instance instance_env type_env nl in
+        let aux tl1 tl2 =
+          if unify tl1 tl2 then raise (UnifiableInstances placeholder_loc)
+        in
+        List.iter
+          (aux (List.map (ast_atype global_env type_env instance_env) (snd n)))
+          (List.map fst (smaps_find (fst n) !global_env_instances));
 
-      (* à partir d'une liste d'ident et d'une liste de 'a, renvoie une Smap contenant les bindings (ident, 'a) *)
-      let rec aux sl tl =
-        match (sl, tl) with
-        | [], [] -> Smaps.empty
-        | s :: t1, t :: t2 -> Smaps.add s t (aux t1 t2)
-        | _ -> raise (BadTypesNumber placeholder_loc)
-      in
+        (* à partir d'une liste d'ident et d'une liste de 'a, renvoie une Smap contenant les bindings (ident, 'a) *)
+        let rec aux sl tl =
+          match (sl, tl) with
+          | [], [] -> Smaps.empty
+          | s :: t1, t :: t2 -> Smaps.add s t (aux t1 t2)
+          | _ -> raise (BadTypesNumber placeholder_loc)
+        in
 
-      let sub_table =
-        aux sl (List.map (ast_atype global_env type_env instance_env) (snd n))
-      in
-      let sub = function TAlias s -> smaps_find s sub_table | t -> t in
-      List.iter
-        (fun (defn : defn) ->
-          match frst (smaps_find (fast defn) !function_env) with
-          | TArrow (tlist, t) ->
-              typ_defn global_env type_env instance_env false defn
-                (List.map sub tlist) (sub t)
-          | _ -> failwith "dans typ_instance, le type récupéré n'est pas TArrow")
-        fl;
-      let rec is_ident = function
-        | Pident s when is_lower s -> true
-        | Ppattern (Parg (l, p)) -> is_ident p
-        | _ -> false
-      in
+        let sub_table =
+          aux sl (List.map (ast_atype global_env type_env instance_env) (snd n))
+        in
+        let sub = function TAlias s -> smaps_find s sub_table | t -> t in
+        List.iter
+          (fun (defn : defn) ->
+            match frst (smaps_find (fast defn) !function_env) with
+            | TArrow (tlist, t) ->
+                typ_defn global_env type_env instance_env false defn
+                  (List.map sub tlist) (sub t); ()
+            | _ ->
+                failwith "dans typ_instance, le type récupéré n'est pas TArrow")
+          fl;
+        let rec is_ident = function
+          | Pident s when is_lower s -> true
+          | Ppattern (Parg (l, p)) -> is_ident p
+          | _ -> false
+        in
 
-      let rec filter s = function
-        | [] -> []
-        | defn :: q when fast defn = s -> defn :: filter s q
-        | defn :: q -> q
-      in
-      let rec col found i = function
-        | [] -> -1
-        | (l, x) :: q when is_ident x -> col found (i + 1) q
-        | x :: q when found -> raise (MultipleFilteredVariables (fst x))
-        | x :: q ->
-            let _ = col found (i + 1) q in
-            i
-      in
-      (* Vérification de l'exhaustivité d'un pattern matching *)
-      let check_exhaust s = function
-        | TArrow (tl, _) -> (
-            let l = filter s (snd dinst) in
-            match l with
-            | [] -> raise (MissingDefinition placeholder_loc)
-            | x :: q ->
-                let c = col false 0 (sand x) in
-                if c = -1 then ()
-                else if
-                  not
-                    (exhaustive_list global_env type_env instance_env
-                       [ sub (List.nth tl c) ]
-                       (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
-                then (raise (NonExhaustivePatternMatching (placeholder_loc))))
-        | _ -> failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
-      in
+        let rec filter s = function
+          | [] -> []
+          | defn :: q when fast defn = s -> defn :: filter s q
+          | defn :: q -> q
+        in
+        let rec col found i = function
+          | [] -> -1
+          | (l, x) :: q when is_ident x -> col found (i + 1) q
+          | x :: q when found -> raise (MultipleFilteredVariables (fst x))
+          | x :: q ->
+              let _ = col found (i + 1) q in
+              i
+        in
+        (* Vérification de l'exhaustivité d'un pattern matching *)
+        let check_exhaust s = function
+          | TArrow (tl, _) -> (
+              let l = filter s (snd dinst) in
+              match l with
+              | [] -> raise (MissingDefinition placeholder_loc)
+              | x :: q ->
+                  let c = col false 0 (sand x) in
+                  if c = -1 then ()
+                  else if
+                    not
+                      (exhaustive_list global_env type_env instance_env
+                         [ sub (List.nth tl c) ]
+                         (List.map (fun w -> [ Parg (List.nth (sand x) c) ]) l))
+                  then raise (NonExhaustivePatternMatching placeholder_loc))
+          | _ ->
+              failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
+        in
 
-      let rec requires = function
-        | [] -> []
-        | n :: q ->
-            ( fst n,
-              List.map (ast_atype global_env type_env instance_env) (snd n) )
-            :: requires q
-      in
+        let rec requires = function
+          | [] -> []
+          | n :: q ->
+              ( fst n,
+                List.map (ast_atype global_env type_env instance_env) (snd n) )
+              :: requires q
+        in
 
-      let requirements = requires nl in
-      Smaps.iter (fun id t -> check_exhaust id t) class_functions;
-      global_env_instances :=
-        Smaps.add (fst n)
-          (( List.map (ast_atype global_env type_env instance_env) (snd n),
-             requirements )
-          :: smaps_find (fst n) !global_env_instances)
-          !global_env_instances
+        let requirements = requires nl in
+        Smaps.iter (fun id t -> check_exhaust id t) class_functions;
+        global_env_instances :=
+          Smaps.add (fst n)
+            (( List.map (ast_atype global_env type_env instance_env) (snd n),
+               requirements )
+            :: smaps_find (fst n) !global_env_instances)
+            !global_env_instances
 
 (* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
-and typ_file (f:file) : tfile =
+and typ_file (f : file) : tfile =
   (* TODO : reconstruire l'AST typé *)
   let global_env = add false "unit" TUnit empty in
   let type_env =
@@ -921,40 +971,50 @@ and typ_file (f:file) : tfile =
            (TCons ("Effect", [ TUnit ]), 1);
          ])
   in
-  let tmain = List.map (typ_declaration global_env type_env !global_env_instances) f.main in
-  verify_def global_env !type_env !global_env_instances ; 
-  if not (Smaps.mem "main" !function_env) then raise MissingMain ;
+  let tmain =
+    List.map (typ_declaration global_env type_env !global_env_instances) f.main
+  in
+  verify_def global_env !type_env !global_env_instances;
+  if not (Smaps.mem "main" !function_env) then raise MissingMain;
   (* programme typé renvoyé *)
-  { tmodule_name=f.module_name; tmain }
+  { tmodule_name = f.module_name; tmain }
 
-and placeholder_tdecl = TDefn ("", [], TEatom (TAconst (Cbool true, TBool), TBool))
+and placeholder_tdecl =
+  TDefn ("", [], TEatom (TAconst (Cbool true, TBool), TBool))
 
 (* Typage d'une déclaration *)
-and typ_declaration global_env (type_env : type_env ref) (instance_env : instance_env) =
-  function
+and typ_declaration global_env (type_env : type_env ref)
+    (instance_env : instance_env) = function
   | Dfdecl fdecl ->
       verify_def !global_env_instances !type_env instance_env;
       let tau, var_env, inst_env =
         typ_fdecl global_env !type_env Smaps.empty fdecl
       in
       function_env :=
-        Smaps.add fdecl.name (tau, var_env, None, inst_env) !function_env ; 
-        placeholder_tdecl
+        Smaps.add fdecl.name (tau.tout_type, var_env, None, inst_env) !function_env;
+      TDfdecl(tau)
   | Defn defn -> (
       match frst (smaps_find (fast defn) !function_env) with
       | TArrow (tlist, t) ->
-          typ_defn global_env !type_env !global_env_instances true defn tlist t ;
-          placeholder_tdecl
+          TDefn(typ_defn global_env !type_env !global_env_instances true defn tlist t);
+
       | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow")
   | Ddata data ->
-      verify_def !global_env_instances !type_env instance_env ;
-      typ_data global_env type_env instance_env data ;
-      placeholder_tdecl
+      verify_def !global_env_instances !type_env instance_env;
+      typ_data global_env type_env instance_env data;
+      TDdata(data)
   | Dclass clas ->
-      verify_def !global_env_instances !type_env instance_env ;
-      typ_class global_env !type_env instance_env clas ;
-      placeholder_tdecl
+      verify_def !global_env_instances !type_env instance_env;
+      typ_class global_env !type_env instance_env clas;
+      TDclass(clas)
   | Dinstance (inst, dlist) ->
-      verify_def !global_env_instances !type_env instance_env ;
-      typ_instance global_env !type_env instance_env (inst, dlist) ;
-      placeholder_tdecl
+      verify_def !global_env_instances !type_env instance_env;
+      typ_instance global_env !type_env instance_env (inst, dlist);
+      TDinstance(inst, List.map (
+        fun defn -> match frst (smaps_find (fast defn) !function_env) with
+        | TArrow (tlist, t) ->
+            (typ_defn global_env !type_env !global_env_instances true defn tlist t);
+  
+        | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow"
+        ) dlist
+      )
