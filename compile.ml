@@ -47,6 +47,7 @@ and alloc_defn (ident, plist, expr) : adecl =
   let a_expr = alloc_expr !env fpcur' expr in 
   ADefn (ident, patargs, a_expr, abs (fpcur' ()))
 
+(* TODO : second env *)
 and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
   let aatom = alloc_atom env fpcur a
@@ -69,16 +70,39 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
 | TEdo (expr_list, t) -> 
   let aexpr_list = List.map (alloc_expr env fpcur) expr_list in
   AEdo (aexpr_list, t, fpcur ())
+| TElet (binding_list, expr, typ) ->
+  (* TODO: faire les deux boucles en une seule *)
+  (* on ajoute à l'environnement les positions des bindings *)
+  let env = List.fold_left (
+    fun acc_env (bident, _btype) -> 
+      Smap.add bident (fpcur ()) acc_env
+    ) env binding_list 
+  in
+
+  (* allocation des expressions dans le binding *)
+  let abinding = List.fold_left (fun l (bident, bexpr) ->
+    begin 
+      let expr = alloc_expr env fpcur bexpr in
+      let res_adr = Smap.find bident env in
+      (res_adr, expr)
+    end :: l
+  ) [] binding_list 
+  in
+
+  (* allocation de l'expression dans le in *)
+  let aexpr = alloc_expr env fpcur expr in
+  AElet (abinding, aexpr, typ, fpcur ())
+
 | _ -> failwith "alloc_expr: todo"
 
 and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
-| TAconst (c, t) -> AAconst (c, t, fpcur ())
+| TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, fpcur ())
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> begin
   match ident with
-  | "unit" -> AAconst (Cbool (false), t, fpcur ())
+  | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
   | _ -> 
     begin
       match Smap.find_opt ident env with
@@ -214,6 +238,19 @@ and compile_expr = function
 
   label if_exit
 
+| AElet (abinding_list, aexpr, t, res_adr) -> 
+  List.fold_left (fun code (badr, bexpr) -> 
+    compile_expr bexpr ++
+    movq (ind ~ofs:(address_of_aexpr bexpr) rbp) (reg rax) ++
+    movq (reg rax) (ind ~ofs:badr rbp)  ++
+    code
+  ) nop abinding_list ++
+
+  (* on compile l'expression dans le in, 
+     et on met son résultat à la bonne position *)
+  compile_expr aexpr ++
+  movq (ind ~ofs:(address_of_aexpr aexpr) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp)
 | _ -> failwith "compile_expr: todo"
 
 and compile_binop (e1, binop, e2, t, res_adr) =
@@ -260,9 +297,7 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
   | Beq when expr_type = TBool -> comparaison_code je a1 a2 res_adr
   | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:res_adr rbp) (* toujours vrai *)
   | Beq when expr_type = TStr -> 
-    (* certes, ressemble à comparaison_code, mais on évite un abus de généralité *)
     let uid = string_of_int !comparaison_count in 
-    (* TODO : possible d'utiliser un seul label *)
     let cmp_is_true = "_cmp_is_true_" ^ uid
     and cmp_is_false = "_cmp_is_false_" ^ uid in
     incr comparaison_count ;
@@ -308,9 +343,10 @@ and comparaison_code instruction a1 a2 res_adr =
 and compile_atom = function 
 | AAexpr (expr, t, res_adr) -> 
   compile_expr expr ++
-  movq (ind ~ofs:(address_of_aexpr expr) rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:res_adr rbp)
-| AAconst (c, t, res_adr) -> 
+  movq (ind ~ofs:res_adr rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:(address_of_aexpr expr) rbp)
+| AAconst (c, c_adr, t, res_adr) -> 
+  (* TODO : histoire louche. est-ce qu'il faut vraiment c_adr ?*)
   let ptr = match c with
   (* si c'est une constante facile, on la représente par un immédiat *)
   | Cint i -> imm i
@@ -384,7 +420,7 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
-        (* fonction not, qui se trouve être dans Purescript classique *)
+        (* fonction not de purescript *)
         label "not" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++

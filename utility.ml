@@ -11,7 +11,7 @@ let type_of_aexpr = function
 | AEcase (_, _, t, _) -> t
 
 let type_of_aatom = function
-| AAconst (_, t, _) -> t
+| AAconst (_, _, t, _) -> t
 | AAident (t, _) -> t
 | AAexpr (_, t, _) -> t
 
@@ -26,6 +26,6 @@ let address_of_aexpr = function
 | AEcase (_, _, _, a) -> a
 
 let address_of_aatom = function
-| AAconst (_, _, a) -> a
+| AAconst (_, _, _, a) -> a
 | AAident (_, a) -> a
 | AAexpr (_, _, a) -> a

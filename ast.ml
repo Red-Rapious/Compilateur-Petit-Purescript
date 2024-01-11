@@ -120,8 +120,8 @@ type texpr =
 | TEfunc of ident * (tatom list) * ttyp
 | TEif of texpr * texpr * texpr * ttyp
 | TEdo of texpr list * ttyp
-| TElet of tbinding list * texpr
-| TEcase of texpr * (tbranch list)
+| TElet of tbinding list * texpr * ttyp
+| TEcase of texpr * (tbranch list) * ttyp
 and tatom =
 | TAconst of constant * ttyp
 | TAident of ident * ttyp
@@ -172,13 +172,13 @@ type aexpr =
 | AElet of abinding list * aexpr * ttyp * int
 | AEcase of aexpr * (abranch list) * ttyp * int
 and aatom =
-| AAconst of constant * ttyp * int
+| AAconst of constant * int * ttyp * int
 | AAident of ttyp * int(* adresse, type *)
 | AAexpr of aexpr * ttyp * int
 
 and abranch = pattern * aexpr
 
-and abinding = ident * aexpr
+and abinding = int * aexpr
 
 and afdecl = {
   aname: ident;

@@ -162,7 +162,7 @@ let () =
             ],
             TCons ("Effect", [TUnit])
           )*)
-          "main", [], TEfunc (
+          (*"main", [], TEfunc (
             "log",
             [
               TAexpr (
@@ -172,6 +172,17 @@ let () =
                 TEfunc ("show", [TAconst (Cint 42, TInt)], TStr),
                 TStr
               ), TStr)
+            ],
+            TCons ("Effect", [TUnit])
+          )*)
+          "main", [], TEfunc (
+            "log",
+            [ TAexpr (
+              TElet ([
+                ("x", TEatom (TAconst(Cstring "a", TStr), TStr))
+              ], 
+              TEatom (TAident ("x", TInt), TInt), TStr), TStr
+              )
             ],
             TCons ("Effect", [TUnit])
           )
