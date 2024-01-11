@@ -113,8 +113,9 @@ and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function
 
 and alloc_patarg fpcur p = 
 match p with 
-| TPconst c -> APconst (c, fpcur ())
+| TPconst (c, t) -> APconst (c, fpcur ())
 | TPident i -> APident (i, fpcur ())
+| _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch (env: local_env) (fpcur: tfpcur) b = failwith "alloc_branch: todo"
 and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: tood"

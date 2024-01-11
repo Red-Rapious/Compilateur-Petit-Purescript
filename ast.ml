@@ -142,7 +142,7 @@ and tfdecl = {
 }
 
 type tpatarg = 
-| TPconst of constant  *ttyp
+| TPconst of constant * ttyp
 | TPident of ident
 | TPpattern of pattern
 
@@ -151,7 +151,7 @@ and tpattern =
 | TPconsarg of ident * (tpatarg list)
 
 
-type tdefn = ident * patarg list * texpr
+type tdefn = ident * tpatarg list * texpr
 
 type tdecl = 
 | TDefn of tdefn

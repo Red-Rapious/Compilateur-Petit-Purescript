@@ -996,7 +996,7 @@ and typ_declaration global_env (type_env : type_env ref)
   | Defn defn -> (
       match frst (smaps_find (fast defn) !function_env) with
       | TArrow (tlist, t) ->
-          TDefn(typ_defn global_env !type_env !global_env_instances true defn tlist t);
+          TDefn(typ_defn global_env !type_env !global_env_instances true defn tlist t)
 
       | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow")
   | Ddata data ->
