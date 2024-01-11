@@ -112,8 +112,8 @@ let round_16 a = match a mod 16 with
 | 0 -> a
 | i -> a + 16-i
 
-let str_counter = ref 0
 let comparaison_count = ref 0
+let if_count = ref 0
 let hardcoded_strings = ref []
 
 let rec compile_decl = function 
@@ -139,7 +139,8 @@ and compile_defn (ident, patargs, expr, fpmax) =
 and compile_expr = function 
 | AEatom (at, t, res_adr) -> 
   compile_atom at ++
-  movq2idx (address_of_aatom at) rbp res_adr rbp
+  movq (ind ~ofs:(address_of_aatom at) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp)
 | AEfunc (name, params, types, res_adr) -> 
   (* production du code de calcul des paramètres *)
   List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
@@ -179,15 +180,40 @@ and compile_expr = function
     | Badd | Bsub | Bmul | Bdiv | Bor | Band -> compile_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
-| AEunop (Uneg, aexpr, t, ret_adr) ->
+| AEunop (Uneg, aexpr, t, res_adr) ->
   compile_expr aexpr ++
   let eadr = address_of_aexpr aexpr in 
   movq (imm 0) (reg r8) ++
   subq (ind ~ofs:eadr rbp) (reg r8) ++
-  movq (reg r8) (ind ~ofs:ret_adr rbp)
+  movq (reg r8) (ind ~ofs:res_adr rbp)
 | AEdo (expr_list, t, res_adr) ->
   List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
   movq (imm 0) (ind ~ofs:res_adr rbp)
+| AEif (e1, e2, e3, _, res_adr) -> 
+  let if_case_true = ".if_case_true_" ^ (string_of_int !if_count)
+  (*and if_case_false = ".if_case_false_" ^ (string_of_int !if_count)*)
+  and if_exit = ".if_exit_" ^ (string_of_int !if_count)
+  in
+  incr if_count ;
+  compile_expr e1 ++
+  movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg rax) ++
+  testq (reg rax) (reg rax) ++
+  jnz if_case_true ++
+
+  (* si la condition est fausse *)
+  compile_expr e3 ++
+  movq (ind ~ofs:(address_of_aexpr e3) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp)  ++
+  jmp if_exit ++
+
+  (* si la condition est vraie *)
+  label if_case_true ++
+  compile_expr e2 ++
+  movq (ind ~ofs:(address_of_aexpr e2) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp)  ++
+
+  label if_exit
+
 | _ -> failwith "compile_expr: todo"
 
 and compile_binop (e1, binop, e2, t, res_adr) =
@@ -221,21 +247,22 @@ and compile_binop (e1, binop, e2, t, res_adr) =
     movq (reg r8) (ind ~ofs:res_adr rbp)
   end
 
-and compile_binop_compare (e1, binop, e2, t, ret_adr) = 
+and compile_binop_compare (e1, binop, e2, t, res_adr) = 
   compile_expr e1 ++
   compile_expr e2 ++
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   let expr_type = type_of_aexpr e1 in
   match binop with
-  | Blt -> comparaison_code jl a1 a2 ret_adr
-  | Ble -> comparaison_code jle a1 a2 ret_adr
+  | Blt -> comparaison_code jl a1 a2 res_adr
+  | Ble -> comparaison_code jle a1 a2 res_adr
   | Bgt | Bge -> failwith "la compilation des opérateurs binaire > et >= sont sensés être traités en utilisant la production de code de < et <="
-  | Beq when expr_type = TInt -> comparaison_code je a1 a2 ret_adr
-  | Beq when expr_type = TBool -> comparaison_code je a1 a2 ret_adr
-  | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:ret_adr rbp) (* toujours vrai *)
+  | Beq when expr_type = TInt -> comparaison_code je a1 a2 res_adr
+  | Beq when expr_type = TBool -> comparaison_code je a1 a2 res_adr
+  | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:res_adr rbp) (* toujours vrai *)
   | Beq when expr_type = TStr -> 
     (* certes, ressemble à comparaison_code, mais on évite un abus de généralité *)
     let uid = string_of_int !comparaison_count in 
+    (* TODO : possible d'utiliser un seul label *)
     let cmp_is_true = "_cmp_is_true_" ^ uid
     and cmp_is_false = "_cmp_is_false_" ^ uid in
     incr comparaison_count ;
@@ -246,20 +273,20 @@ and compile_binop_compare (e1, binop, e2, t, ret_adr) =
     testq (reg rax) (reg rax) ++
 
     jz cmp_is_true ++
-    movq (imm 0) (ind ~ofs:ret_adr rbp) ++
+    movq (imm 0) (ind ~ofs:res_adr rbp) ++
     jmp cmp_is_false ++
 
     label cmp_is_true ++
-    movq (imm 1) (ind ~ofs:ret_adr rbp) ++
+    movq (imm 1) (ind ~ofs:res_adr rbp) ++
     
     label cmp_is_false
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
   | Bneq -> 
-    compile_binop_compare (e1, Beq, e2, t, ret_adr) ++
+    compile_binop_compare (e1, Beq, e2, t, res_adr) ++
     call "not" ++
-    movq (reg rax) (ind ~ofs:ret_adr rbp)
+    movq (reg rax) (ind ~ofs:res_adr rbp)
   | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
-and comparaison_code instruction a1 a2 ret_adr =
+and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
   let cmp_is_true = "_cmp_is_true_" ^ uid
   and cmp_is_false = "_cmp_is_false_" ^ uid in
@@ -270,19 +297,19 @@ and comparaison_code instruction a1 a2 ret_adr =
   cmpq (reg r12) (reg r13) ++
 
   instruction cmp_is_true ++
-  movq (imm 0) (ind ~ofs:ret_adr rbp) ++
+  movq (imm 0) (ind ~ofs:res_adr rbp) ++
   jmp cmp_is_false ++
 
   label cmp_is_true ++
-  movq (imm 1) (ind ~ofs:ret_adr rbp) ++
+  movq (imm 1) (ind ~ofs:res_adr rbp) ++
   
   label cmp_is_false
 
 and compile_atom = function 
 | AAexpr (expr, t, res_adr) -> 
-  let adresse_dest = address_of_aexpr expr in 
   compile_expr expr ++
-  movq2idx adresse_dest rbp res_adr rbp
+  movq (ind ~ofs:(address_of_aexpr expr) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp)
 | AAconst (c, t, res_adr) -> 
   let ptr = match c with
   (* si c'est une constante facile, on la représente par un immédiat *)
@@ -291,9 +318,8 @@ and compile_atom = function
   | Cbool true -> imm 1
   (* sinon, on l'ajoute au segment data, et on renvoie un label *)
   | Cstring s -> 
-    let str_label = "hardcoded_string_"^(string_of_int !str_counter) in 
+    let str_label = "hardcoded_string_"^(string_of_int (List.length !hardcoded_strings)) in 
     hardcoded_strings := (str_label, s) :: !hardcoded_strings ;
-    incr str_counter ;
     (ilab str_label)
   in
   movq ptr (ind ~ofs:res_adr rbp)
