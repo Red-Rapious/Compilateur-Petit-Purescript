@@ -112,8 +112,8 @@ let round_16 a = match a mod 16 with
 | 0 -> a
 | i -> a + 16-i
 
-let str_counter = ref 0
 let comparaison_count = ref 0
+let if_count = ref 0
 let hardcoded_strings = ref []
 
 let rec compile_decl = function 
@@ -188,6 +188,30 @@ and compile_expr = function
 | AEdo (expr_list, t, res_adr) ->
   List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
   movq (imm 0) (ind ~ofs:res_adr rbp)
+| AEif (e1, e2, e3, _, ret_adr) -> 
+  let if_case_true = ".if_case_true_" ^ (string_of_int !if_count)
+  (*and if_case_false = ".if_case_false_" ^ (string_of_int !if_count)*)
+  and if_exit = ".if_exit_" ^ (string_of_int !if_count)
+  in
+  incr if_count ;
+  compile_expr e1 ++
+  movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg rax) ++
+  testq (reg rax) (reg rax) ++
+  jnz if_case_true ++
+  (* 2 mov *)
+
+  (* si la condition est fausse *)
+  compile_expr e3 ++
+  movq2idx (address_of_aexpr e3) rbp ret_adr rbp ++
+  jmp if_exit ++
+
+  (* si la condition est vraie *)
+  label if_case_true ++
+  compile_expr e2 ++
+  movq2idx (address_of_aexpr e2) rbp ret_adr rbp ++
+
+  label if_exit
+
 | _ -> failwith "compile_expr: todo"
 
 and compile_binop (e1, binop, e2, t, res_adr) =
@@ -236,6 +260,7 @@ and compile_binop_compare (e1, binop, e2, t, ret_adr) =
   | Beq when expr_type = TStr -> 
     (* certes, ressemble à comparaison_code, mais on évite un abus de généralité *)
     let uid = string_of_int !comparaison_count in 
+    (* TODO : possible d'utiliser un seul label *)
     let cmp_is_true = "_cmp_is_true_" ^ uid
     and cmp_is_false = "_cmp_is_false_" ^ uid in
     incr comparaison_count ;
@@ -291,9 +316,8 @@ and compile_atom = function
   | Cbool true -> imm 1
   (* sinon, on l'ajoute au segment data, et on renvoie un label *)
   | Cstring s -> 
-    let str_label = "hardcoded_string_"^(string_of_int !str_counter) in 
+    let str_label = "hardcoded_string_"^(string_of_int (List.length !hardcoded_strings)) in 
     hardcoded_strings := (str_label, s) :: !hardcoded_strings ;
-    incr str_counter ;
     (ilab str_label)
   in
   movq ptr (ind ~ofs:res_adr rbp)
