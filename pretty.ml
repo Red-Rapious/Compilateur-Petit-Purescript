@@ -2,6 +2,12 @@ open Ast
 open Format
 open Parser
 
+let reset_code = "\o033[0m"
+let blue_code = "\o033[34m"
+let red_code = "\o033[91m"
+let green_code = "\o033[92m"
+let magenta_code = "\o033[95m"
+
 let print_binop b = 
 match b with
 | Beq -> "=="
@@ -68,29 +74,36 @@ let print_token t = match t with
 | CMP binop -> print_binop binop
 
 let rec pp_typ fmt = function
-  | TArrow ([], t) -> Format.fprintf fmt "%a" pp_atom t
-  | TArrow (h :: t, t2) ->
-      Format.fprintf fmt "%a ->@ %a" pp_atom h pp_typ (TArrow (t, t2))
-  | (TInt | TVar _ | TUnit | TStr | TBool (*| TEffect _*) | TCons _ | TAlias _) as t -> pp_atom fmt t
+| TArrow ([], t) -> Format.fprintf fmt "%a" pp_atom t
+| TArrow (h :: t, t2) ->
+    Format.fprintf fmt "%a ->@ %a" pp_atom h pp_typ (TArrow (t, t2))
+| (TInt | TVar _ | TUnit | TStr | TBool (*| TEffect _*) | TCons _ | TAlias _) as t -> pp_atom fmt t
 
-and pp_atom fmt = function
-  | TInt -> Format.fprintf fmt "Int"
-  | TUnit -> Format.fprintf fmt "Unit"
-  (*| TEffect t ->
-      Format.fprintf fmt "Effect ";
-      pp_typ fmt t*)
-  | TBool -> Format.fprintf fmt "Bool"
-  | TStr -> Format.fprintf fmt "String"
-  | TVar v -> pp_TVar fmt v
-  | TArrow _ as t -> Format.fprintf fmt "@[<1>(%a)@]" pp_typ t
-  | TAlias tag -> Format.fprintf fmt "Alias %s" tag
-  | TCons (tag, tlist) -> 
-    Format.fprintf fmt "Cons (%s, [" tag ;
-    List.iter (fun t -> 
-      pp_atom fmt t ;
-      Format.fprintf fmt ", " (* oui, même pour le dernier *)
-    ) tlist ;
-    Format.fprintf fmt "])"
+and pp_atom fmt a = 
+Format.fprintf fmt "%s" magenta_code ;
+begin 
+match a with
+| TInt -> Format.fprintf fmt "Int"
+| TUnit -> Format.fprintf fmt "Unit"
+(*| TEffect t ->
+    Format.fprintf fmt "Effect ";
+    pp_typ fmt t*)
+| TBool -> Format.fprintf fmt "Bool"
+| TStr -> Format.fprintf fmt "String"
+| TVar v -> pp_TVar fmt v
+| TArrow _ as t -> Format.fprintf fmt "@[<1>(%a)@]" pp_typ t
+| TAlias tag -> Format.fprintf fmt "Alias %s" tag
+| TCons (tag, tlist) -> 
+  Format.fprintf fmt "Cons (%s, [" tag ;
+  List.iter (fun t -> 
+    pp_atom fmt t ;
+    Format.fprintf fmt ", " (* oui, même pour le dernier *)
+  ) tlist ;
+  Format.fprintf fmt "])"
+end
+;
+Format.fprintf fmt "%s" reset_code
+
 
 and pp_TVar fmt = function
   | { def = None; id } -> Format.fprintf fmt "'%d" id
@@ -104,19 +117,19 @@ let ident fmt depth =
 let rec pp_aexpr fmt depth = function
 | AEatom (a, t, i) -> 
   ident fmt depth ;
-  Format.fprintf fmt "AEatom of type " ;
+  Format.fprintf fmt "%sAEatom%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   pp_aatom fmt (depth + 1) a
 | AEunop (_, e, t, i) ->
   ident fmt depth ;
-  Format.fprintf fmt "AEunop of type " ;
+  Format.fprintf fmt "%sAEunop%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   pp_aexpr fmt (depth + 1) e
 | AEbinop (e1, b, e2, t, i) ->
   ident fmt depth ;
-  Format.fprintf fmt "AEunop of type " ;
+  Format.fprintf fmt "%sAEunop%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   ident fmt depth ;
@@ -127,7 +140,7 @@ let rec pp_aexpr fmt depth = function
   pp_aexpr fmt (depth + 1) e2
 | AEfunc (id, alist, t, i) ->
   ident fmt depth ;
-  Format.fprintf fmt "AEfunc named %s of type " id;
+  Format.fprintf fmt "%sAEfunc%s named %s of type " blue_code reset_code id;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   ident fmt depth ;
@@ -135,7 +148,7 @@ let rec pp_aexpr fmt depth = function
   List.iter (pp_aatom fmt (depth + 1)) alist
 | AEif (e1, e2, e3, t, i) ->
   ident fmt depth ;
-  Format.fprintf fmt "AEif of type " ;
+  Format.fprintf fmt "%sAEif%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   ident fmt depth ;
@@ -149,33 +162,33 @@ let rec pp_aexpr fmt depth = function
   pp_aexpr fmt (depth + 1) e3
 | AEdo (elist, t, i) ->
   ident fmt depth ;
-  Format.fprintf fmt "AEdo of type " ;
+  Format.fprintf fmt "%sAEdo%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   ident fmt depth ;
   Format.fprintf fmt "List of contained expressions:@." ;
   List.iter (pp_aexpr fmt (depth + 1)) elist
-| _ ->   ident fmt depth ; Format.fprintf fmt "THIS PART IS NOT SUPPORTED BY THE PRETTY PRINTER"
+| _ ->   ident fmt depth ; Format.fprintf fmt "%sTHIS PART IS NOT SUPPORTED BY THE PRETTY PRINTER%s" red_code reset_code
 and pp_aatom fmt depth a = 
 ident fmt depth ;
 match a with
 | AAconst (c, i, t, i') ->
-  Format.fprintf fmt "AAconst of type " ;
+  Format.fprintf fmt "%sAAconst%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with const offset %d and result offset of %d@." i i';
   pp_const fmt (depth + 1) c
 | AAident (t, i) -> 
-  Format.fprintf fmt "AAident of type ";
+  Format.fprintf fmt "%sAAident%s of type " blue_code reset_code;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
 | AAexpr (e, t, i) -> 
-  Format.fprintf fmt "AAexpr of type " ;
+  Format.fprintf fmt "%sAAexpr%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %d@." i ;
   pp_aexpr fmt (depth + 1) e 
 and pp_const fmt depth c = 
 ident fmt depth ;
 match c with 
-| Cbool b -> Format.fprintf fmt "Cbool (%b)" b
-| Cstring s -> Format.fprintf fmt "Cstring (%s)" s
-| Cint i -> Format.fprintf fmt "Cint (%d)" i
+| Cbool b -> Format.fprintf fmt "Cbool %b@." b
+| Cstring s -> Format.fprintf fmt "Cstring %s\"%s\"%s@." green_code s reset_code
+| Cint i -> Format.fprintf fmt "Cint %d@." i
