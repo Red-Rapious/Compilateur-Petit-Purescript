@@ -83,8 +83,99 @@ and pp_atom fmt = function
   | TStr -> Format.fprintf fmt "String"
   | TVar v -> pp_TVar fmt v
   | TArrow _ as t -> Format.fprintf fmt "@[<1>(%a)@]" pp_typ t
-  | _ -> failwith "implémenter le pretty printing de Cons et Alias"
+  | TAlias tag -> Format.fprintf fmt "Alias %s" tag
+  | TCons (tag, tlist) -> 
+    Format.fprintf fmt "Cons (%s, [" tag ;
+    List.iter (fun t -> 
+      pp_atom fmt t ;
+      Format.fprintf fmt ", " (* oui, même pour le dernier *)
+    ) tlist ;
+    Format.fprintf fmt "])"
 
 and pp_TVar fmt = function
   | { def = None; id } -> Format.fprintf fmt "'%d" id
   | { def = Some t; id } -> Format.fprintf fmt "@[<1>('%d := %a)@]" id pp_typ t
+
+let ident fmt depth =
+  for _ = 1 to depth do 
+    Format.fprintf fmt "\t"
+  done
+
+let rec pp_aexpr fmt depth = function
+| AEatom (a, t, i) -> 
+  ident fmt depth ;
+  Format.fprintf fmt "AEatom of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  pp_aatom fmt (depth + 1) a
+| AEunop (_, e, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "AEunop of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  pp_aexpr fmt (depth + 1) e
+| AEbinop (e1, b, e2, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "AEunop of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  ident fmt depth ;
+  Format.fprintf fmt "First expression:@." ;
+  pp_aexpr fmt (depth + 1) e1 ;
+  ident fmt depth ;
+  Format.fprintf fmt "Second expression:@." ;
+  pp_aexpr fmt (depth + 1) e2
+| AEfunc (id, alist, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "AEfunc named %s of type " id;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  ident fmt depth ;
+  Format.fprintf fmt "List of contained atoms:@." ;
+  List.iter (pp_aatom fmt (depth + 1)) alist
+| AEif (e1, e2, e3, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "AEif of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  ident fmt depth ;
+  Format.fprintf fmt "Condition:@." ;
+  pp_aexpr fmt (depth + 1) e1 ;
+  ident fmt depth ;
+  Format.fprintf fmt "then:@." ;
+  pp_aexpr fmt (depth + 1) e2 ;
+  ident fmt depth ;
+  Format.fprintf fmt "else:@." ;
+  pp_aexpr fmt (depth + 1) e3
+| AEdo (elist, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "AEdo of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  ident fmt depth ;
+  Format.fprintf fmt "List of contained expressions:@." ;
+  List.iter (pp_aexpr fmt (depth + 1)) elist
+| _ ->   ident fmt depth ; Format.fprintf fmt "THIS PART IS NOT SUPPORTED BY THE PRETTY PRINTER"
+and pp_aatom fmt depth a = 
+ident fmt depth ;
+match a with
+| AAconst (c, i, t, i') ->
+  Format.fprintf fmt "AAconst of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with const offset %d and result offset of %d@." i i';
+  pp_const fmt (depth + 1) c
+| AAident (t, i) -> 
+  Format.fprintf fmt "AAident of type ";
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+| AAexpr (e, t, i) -> 
+  Format.fprintf fmt "AAexpr of type " ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %d@." i ;
+  pp_aexpr fmt (depth + 1) e 
+and pp_const fmt depth c = 
+ident fmt depth ;
+match c with 
+| Cbool b -> Format.fprintf fmt "Cbool (%b)" b
+| Cstring s -> Format.fprintf fmt "Cstring (%s)" s
+| Cint i -> Format.fprintf fmt "Cint (%d)" i

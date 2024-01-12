@@ -147,6 +147,7 @@ let rec compile_decl = function
 | _ -> failwith "compile_decl: todo"
 
 and compile_defn (ident, patargs, expr, fpmax) = 
+  Pretty.pp_aexpr std_formatter 0 expr ;
   label ident ++
   enter (imm (round_16 (abs fpmax))) ++
 

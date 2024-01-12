@@ -3,24 +3,27 @@ type loc = Lexing.position * Lexing.position
 type ident = string
 
 type binop =
-  | Beq
-  | Bneq
-  | Blt
-  | Ble
-  | Bgt
-  | Bge
-  | Badd
-  | Bsub
-  | Bmul
-  | Bdiv
-  | Band
-  | Bor
-  | Bconcat
+| Beq
+| Bneq
+| Blt
+| Ble
+| Bgt
+| Bge
+| Badd
+| Bsub
+| Bmul
+| Bdiv
+| Band
+| Bor
+| Bconcat
 
 type unop = Uneg
 
 (* AST généré par l'analyse syntaxique *)
-type constant = Cbool of bool | Cstring of string | Cint of int
+type constant = 
+| Cbool of bool 
+| Cstring of string 
+| Cint of int
 
 type atype = 
 | Tident of ident
