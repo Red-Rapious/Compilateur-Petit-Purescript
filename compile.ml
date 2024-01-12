@@ -55,7 +55,13 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
 | TEbinop (e1, op, e2, t) -> 
   let e1' = alloc_expr env fpcur e1 in 
   let e2' = alloc_expr env fpcur e2 in
-  AEbinop(e1', op, e2', t, fpcur ())
+  begin
+    match op with 
+    | Bneq -> 
+      let negation = AEbinop(e1', Beq, e2', t, fpcur ()) in
+      AEfunc ("not", [AAexpr (negation, type_of_aexpr negation, address_of_aexpr negation)], t, fpcur ())
+    | _ -> AEbinop(e1', op, e2', t, fpcur ())
+  end
 | TEunop (op, e, t) ->
   let e' = alloc_expr env fpcur e in 
   AEunop (op, e', t, fpcur ())
@@ -147,7 +153,7 @@ let rec compile_decl = function
 | _ -> failwith "compile_decl: todo"
 
 and compile_defn (ident, patargs, expr, fpmax) = 
-  Pretty.pp_aexpr std_formatter 0 expr ;
+  (*Pretty.pp_aexpr std_formatter 0 expr ;*)
   label ident ++
   enter (imm (round_16 (abs fpmax))) ++
 
@@ -318,10 +324,10 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
     
     label cmp_is_false
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
-  | Bneq -> 
+  (*| Bneq ->
     compile_binop_compare (e1, Beq, e2, t, res_adr) ++
     call "not" ++
-    movq (reg rax) (ind ~ofs:res_adr rbp)
+    movq (reg rax) (ind ~ofs:res_adr rbp)*)
   | Bconcat -> failwith "todo: concat"
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
 and comparaison_code instruction a1 a2 res_adr =
