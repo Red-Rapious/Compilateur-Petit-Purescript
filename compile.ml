@@ -209,7 +209,7 @@ and compile_expr = function
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
     match binop with
-    | Badd | Bsub | Bmul | Bdiv | Bor | Band -> compile_binop (e1, binop, e2, t, a)
+    | Badd | Bsub | Bmul | Bdiv | Bor | Band | Bconcat -> compile_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
 | AEunop (Uneg, aexpr, t, res_adr) ->
@@ -267,14 +267,15 @@ and compile_binop (e1, binop, e2, t, res_adr) =
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
-    (*movq (ind ~ofs:a1 rbp) (reg rax) ++
-    movq (ind ~ofs:a2 rbp) (reg rbx) ++
-    cqto ++ 
-    idivq !%rbx ++
-    movq (reg rax) (ind ~ofs:a rbp)*)
     pushq (ind ~ofs:a2 rbp) ++
     pushq (ind ~ofs:a1 rbp) ++
     call ".div" ++
+    movq (reg rax) (ind ~ofs:res_adr rbp)
+  end
+  else if binop = Bconcat then begin 
+    pushq (ind ~ofs:a2 rbp) ++
+    pushq (ind ~ofs:a1 rbp) ++
+    call ".concat" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)
   end
   else begin
@@ -328,7 +329,6 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
     compile_binop_compare (e1, Beq, e2, t, res_adr) ++
     call "not" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)*)
-  | Bconcat -> failwith "todo: concat"
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
 and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
@@ -553,13 +553,33 @@ let compile_program (p : tdecl list) ofile =
         label ".Lfalse" ++
         movq (ilab "false") (reg rax) ++
         leave ++
-        ret
+        ret ++
 
-        (*label ".Lprint" ++
-        movq (imm 0) !%rax ++
-        call "printf" ++
+        (* fonction de concaténation de deux strings *)
+        label ".concat" ++
+        enter (imm 0) ++
+        (* calcul de la longueur de la première chaîne *)
+        movq (ind ~ofs:16 rbp) (reg rdi) ++
+        call "strlen" ++
+        movq (reg rax) (reg r9) ++
+        movq (ind ~ofs:24 rbp) (reg rdi) ++
+        (* calcul de la longueur de la seconde chaîne *)
+        call "strlen" ++
+        addq (reg rax) (reg r9) ++ (* longeur totale*)
+        incq (reg r9) ++
+        movq (reg r9) (reg rdi) ++
+        (* allocation de la mémoire nécessaire à s1 <> s2 *)
+        call "malloc" ++
+        (* déplacement puis concaténation *)
+        movq (reg rax) (reg r8) ++
+        movq (reg rax) (reg rdi) ++
+        movq (ind ~ofs:16 rbp) (reg rsi) ++
+        call "strcpy" ++
+        movq (ind ~ofs:24 rbp) (reg rsi) ++
+        call "strcat" ++
+        movq (reg r8) (reg rax) ++
         leave ++
-        ret*)
+        ret
       ;
       data = data
     }
