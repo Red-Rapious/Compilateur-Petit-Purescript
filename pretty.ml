@@ -190,6 +190,6 @@ match a with
 and pp_const fmt depth c = 
 ident fmt depth ;
 match c with 
-| Cbool b -> Format.fprintf fmt "Cbool %b@." b
+| Cbool b -> Format.fprintf fmt "Cbool %s%b%s@." green_code b reset_code
 | Cstring s -> Format.fprintf fmt "Cstring %s\"%s\"%s@." green_code s reset_code
-| Cint i -> Format.fprintf fmt "Cint %d@." i
+| Cint i -> Format.fprintf fmt "Cint %s%d%s@." green_code i reset_code

@@ -274,7 +274,7 @@ let rec typ_exp global_env type_env
               match op with
               | Blt | Ble -> TEbinop (s1, op, s2, TBool)
               | Bgt -> TEbinop (s2, Blt, s1, TBool)
-              | Bge -> TEbinop (s1, Ble, s2, TBool)
+              | Bge -> TEbinop (s2, Ble, s1, TBool)
               | _ -> failwith ""
             end
           | _ ->
