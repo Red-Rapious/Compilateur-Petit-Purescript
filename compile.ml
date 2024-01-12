@@ -113,8 +113,8 @@ and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function
 
 and alloc_patarg fpcur p = 
 match p with 
-| TPconst (c, t) -> APconst (c, fpcur ())
-| TPident i -> APident (i, fpcur ())
+| Pconst c -> APconst (c, fpcur ())
+| Pident i -> APident (i, fpcur ())
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch (env: local_env) (fpcur: tfpcur) b = failwith "alloc_branch: todo"
@@ -267,7 +267,7 @@ and compile_binop (e1, binop, e2, t, res_adr) =
     movq (reg rax) (ind ~ofs:a rbp)*)
     pushq (ind ~ofs:a2 rbp) ++
     pushq (ind ~ofs:a1 rbp) ++
-    call "_div" ++
+    call ".div" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)
   end
   else begin
@@ -299,8 +299,8 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
   | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:res_adr rbp) (* toujours vrai *)
   | Beq when expr_type = TStr -> 
     let uid = string_of_int !comparaison_count in 
-    let cmp_is_true = "_cmp_is_true_" ^ uid
-    and cmp_is_false = "_cmp_is_false_" ^ uid in
+    let cmp_is_true = ".cmp_is_true_" ^ uid
+    and cmp_is_false = ".cmp_is_false_" ^ uid in
     incr comparaison_count ;
     
     movq (ind ~ofs:a1 rbp) (reg rdi) ++
@@ -324,8 +324,8 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
   | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
 and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
-  let cmp_is_true = "_cmp_is_true_" ^ uid
-  and cmp_is_false = "_cmp_is_false_" ^ uid in
+  let cmp_is_true = ".cmp_is_true_" ^ uid
+  and cmp_is_false = ".cmp_is_false_" ^ uid in
   incr comparaison_count ;
   
   movq (ind ~ofs:a1 rbp) (reg r13) ++
@@ -355,11 +355,13 @@ and compile_atom = function
   | Cbool true -> imm 1
   (* sinon, on l'ajoute au segment data, et on renvoie un label *)
   | Cstring s -> 
-    let str_label = "hardcoded_string_"^(string_of_int (List.length !hardcoded_strings)) in 
+    let str_label = ".hardcoded_string_"^(string_of_int (List.length !hardcoded_strings)) in 
     hardcoded_strings := (str_label, s) :: !hardcoded_strings ;
     (ilab str_label)
   in
-  movq ptr (ind ~ofs:res_adr rbp)
+  movq ptr (ind ~ofs:res_adr rbp) ++
+  movq (ind ~ofs:res_adr rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:c_adr rbp)
 | AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
 
 let compile_program (p : tdecl list) ofile =
@@ -371,10 +373,10 @@ let compile_program (p : tdecl list) ofile =
   begin
     label ".Sprint_int" ++ string "%d\n" ++
     label ".Sprint_string" ++ string "%s\n" ++
-    label "true" ++ string "true\n" ++
-    label "false" ++ string "false\n" ++
+    label "true" ++ string "true" ++
+    label "false" ++ string "false" ++
     List.fold_left (fun code (label_name, str) ->
-      code ++ label label_name ++ string (str^"\n")
+      code ++ label label_name ++ string str
     ) nop !hardcoded_strings
   end
   in
@@ -427,11 +429,11 @@ let compile_program (p : tdecl list) ofile =
         movq (ind ~ofs:16 rbp) (reg rax) ++
         (* si la valeur vaut 0, on la remplace par 1, sinon par 0 *)
         testq (reg rax) (reg rax) ++
-        jz "_not_0" ++
+        jz ".not_0" ++
         movq (imm 0) (reg rax) ++
         leave ++
         ret ++
-        label "_not_0" ++
+        label ".not_0" ++
         movq (imm 1) (reg rax) ++
         leave ++
         ret ++
@@ -441,39 +443,39 @@ let compile_program (p : tdecl list) ofile =
         (* fonction de division *)
         (* la complexité vient du fait que idivq peut retourner 
           un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
-        label "_div" ++
+        label ".div" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++
         (* on place les drapeaux pour tester le signe de rax *)
         testq (reg rax) (reg rax) ++
         (* si négatif, on appelle la fonction dédiée *)
-        js "_div_s" ++
+        js ".div_s" ++
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm 0) (reg rdx) ++
         idivq (reg rcx) ++
         leave ++
         ret ++
 
-        label "_div_s" ++
+        label ".div_s" ++
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm (-1)) (reg rdx) ++
         idivq (reg rcx) ++
         (* on teste si rdx est non-nul *)
         testq (reg rdx) (reg rdx) ++
-        jnz "_div_1" ++
+        jnz ".div_1" ++
         leave ++
         ret ++
 
         (* si rdx est non-nul *)
-        label "_div_1" ++
+        label ".div_1" ++
         (* si le quotient est positif, on retire 1 *)
         cmpq (imm 0) (ind ~ofs:24 rbp) ++
-        jg "_decq_leave" ++
+        jg ".decq_leave" ++
         incq (reg rax) ++
         leave ++
         ret ++
 
-        label "_decq_leave" ++
+        label ".decq_leave" ++
         decq (reg rax) ++
         leave ++
         ret ++
@@ -499,7 +501,7 @@ let compile_program (p : tdecl list) ofile =
         movq (ind ~ofs:16 rbp) (reg rax) ++
         testq (reg rax) (reg rax) ++
 
-        js "_mod_s" ++
+        js ".mod_s" ++
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm 0) (reg rdx) ++
         idivq (reg rcx) ++
@@ -507,26 +509,26 @@ let compile_program (p : tdecl list) ofile =
         leave ++
         ret ++
 
-        label "_mod_s" ++
+        label ".mod_s" ++
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm (-1)) (reg rdx) ++
         idivq (reg rcx) ++
         (*testq (reg rdx) (reg rdx) ++*)
         movq (reg rdx) (reg rax) ++
         testq (reg rax) (reg rax) ++
-        jz "_mod_0" ++
+        jz ".mod_0" ++
         cmpq (imm 0) (ind ~ofs:24 rbp) ++
-        js "_mod_ss" ++
+        js ".mod_ss" ++
         addq (ind ~ofs:24 rbp) (reg rax) ++
         leave ++
         ret ++
 
-        label "_mod_ss" ++
+        label ".mod_ss" ++
         subq (ind ~ofs:24 rbp) (reg rax) ++
         leave ++
         ret ++
 
-        label "_mod_0" ++
+        label ".mod_0" ++
         movq (imm 0) (reg rax) ++
         leave ++
         ret ++

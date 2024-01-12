@@ -92,17 +92,11 @@ and comment = parse
 (* Remarque : cette manière de localiser les chaînes de caractères 
 empêche une bonne localisation du début et de la fin de la chaîne. *)
 and string = parse
-  | '"'     { 
-    let s = Buffer.contents string_buffer in
-	  Buffer.reset string_buffer;
-	  s }
+  | '"'     { let s = Buffer.contents string_buffer in Buffer.reset string_buffer; s }
   | "\n"    { raise (Lexing_error "\\n inside a string outside of a \\ block")}
-  | "\\n"   { 
-    Buffer.add_char string_buffer '\n';
-	  string lexbuf }
-  | "\\\""  { 
-    Buffer.add_char string_buffer '"';
-	  string lexbuf }
+  | "\\\\"  { Buffer.add_char string_buffer '\\' ; string lexbuf }
+  | "\\n"   { Buffer.add_char string_buffer '\n' ; string lexbuf }
+  | "\\\""  { Buffer.add_char string_buffer '"'  ; string lexbuf }
   | "\\"    { between_slashes lexbuf }
   | _ as c  { 
     Buffer.add_char string_buffer c;

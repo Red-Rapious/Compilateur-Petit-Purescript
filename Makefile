@@ -15,6 +15,11 @@ clean:
 test: ppurs
 	./ppurs test.purs
 
+testc: ppurs
+	./ppurs test.purs
+	gcc -g -no-pie test.s
+	./a.out
+
 tests:
 	@echo "'make tests' n'est pas une commande valide. Essayez 'make tests1', 'make tests2', ou 'make tests3'."
 

@@ -91,7 +91,7 @@ let () =
     if !type_only then exit 0;
 
     (* TEST *)
-    let typed_file = {
+    (*let typed_file = {
       tmodule_name = "Main";
       tmain = [
         TDfdecl ({
@@ -188,7 +188,7 @@ let () =
           )
         )
       ]
-    } in
+    } in*)
     Compile.compile_program typed_file.tmain !ofile
   with
     (* Erreur lexicale *)

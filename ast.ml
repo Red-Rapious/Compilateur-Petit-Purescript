@@ -141,17 +141,13 @@ and tfdecl = {
   tout_type: ttyp
 }
 
-type tpatarg = 
-| TPconst of constant * ttyp
-| TPident of ident
-| TPpattern of pattern
 
 and tpattern = 
-| TParg of tpatarg
-| TPconsarg of ident * (tpatarg list)
+| TParg of patarg
+| TPconsarg of ident * (patarg list)
 
 
-type tdefn = ident * tpatarg list * texpr
+type tdefn = ident * patarg list * texpr
 
 type tdecl = 
 | TDefn of tdefn
