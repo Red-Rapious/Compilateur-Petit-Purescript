@@ -1,5 +1,6 @@
 open Ast
 open Pretty
+open Utility
 
 exception TypingError of loc * string
 exception EmptyPatternMatching of loc
@@ -209,21 +210,6 @@ let rec substitute set t =
   | TCons (s, tlist) -> TCons (s, List.map (substitute set) tlist)
   | _ as t -> t
 
-let personne = function
-  | TEatom (_, t) -> t
-  | TEunop (_, _, t) -> t
-  | TEbinop (_, _, _, t) -> t
-  | TEfunc (_, _, t) -> t
-  | TEif (_, _, _, t) -> t
-  | TEdo (_, t) -> t
-  | TElet (_, _, t) -> t
-  | TEcase (_, _, t) -> t
-
-let boug = function 
-  | TAconst(_, t) -> t
-  | TAident(_, t) -> t
-  | TAexpr(_, t) -> t
-
 let rec typ_exp global_env type_env
     (instance_env : (ttyp list * (ident * ttyp list) list) list Smaps.t) global
     loc_expr =
@@ -231,7 +217,7 @@ let rec typ_exp global_env type_env
   match expr with
   | Eunop (u, e) -> (
       let k = typ_exp global_env type_env instance_env global e in
-      match personne k with
+      match type_of_texpr k with
       | TInt -> TEunop (u, k, TInt)
       | _ ->
           typing_error (fst e)
@@ -239,11 +225,11 @@ let rec typ_exp global_env type_env
              est TInt")
   | Eif (e1, e2, e3) -> (
       let s1 = typ_exp global_env type_env instance_env global e1 in
-      match personne s1 with
+      match type_of_texpr s1 with
       | TBool ->
           let s2 = typ_exp global_env type_env instance_env global e2 in
           let s3 = typ_exp global_env type_env instance_env global e3 in
-          if typ_eq (personne s2) (personne s3)then TEif (s1, s2, s3, personne s2)
+          if typ_eq (type_of_texpr s2) (type_of_texpr s3)then TEif (s1, s2, s3, type_of_texpr s2)
           else
             typing_error (fst e3) "les deux branches doivent être de même type"
       | _ ->
@@ -254,13 +240,13 @@ let rec typ_exp global_env type_env
       let s1 = typ_exp global_env type_env instance_env global e1 in
       let s2 = typ_exp global_env type_env instance_env global e2 in
       let binop_string = Pretty.print_binop op in
-      if personne s1 <> personne s2 then
+      if type_of_texpr s1 <> type_of_texpr s2 then
         typing_error (fst e2)
           ("mauvais opérande pour '" ^ binop_string
          ^ "' : les deux types doivent être identiques");
       match op with
       | Beq | Bneq -> (
-          match personne s1 with
+          match type_of_texpr s1 with
           | TInt | TBool | TStr | TUnit -> TEbinop (s1, op, s2, TBool)
           | _ ->
               typing_error (fst e1)
@@ -268,7 +254,7 @@ let rec typ_exp global_env type_env
                ^ "' : les expressions comparées doivent être de type TInt, \
                   String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
-        match personne s1 with
+        match type_of_texpr s1 with
         | TInt -> begin
               (* on convertit les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
               match op with
@@ -282,33 +268,33 @@ let rec typ_exp global_env type_env
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions comparées doivent être de type TInt"))
       | Bsub | Badd | Bmul | Bdiv -> (
-          match personne s1 with
+          match type_of_texpr s1 with
           | TInt -> TEbinop (s1, op, s2, TInt)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type TInt"))
       | Bconcat -> (
-          match personne s1 with
+          match type_of_texpr s1 with
           | TStr -> TEbinop (s1, op, s2, TStr)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions concaténées doivent être de type Str"))
       | Band | Bor -> (
-          match personne s1 with
+          match type_of_texpr s1 with
           | TBool -> TEbinop (s1, op, s2, TBool)
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string
                ^ "' : les expressions manipulées doivent être de type Bool")))
-  | Eatom a -> let  k = typ_atom global_env type_env instance_env global a in TEatom (k, boug k)
+  | Eatom a -> let  k = typ_atom global_env type_env instance_env global a in TEatom (k, type_of_tatom k)
   | Edo l ->
       let l2 =
         List.map
           (fun e ->
             let k = typ_exp global_env type_env instance_env global e in
-            if not (typ_eq (personne k) (TCons ("Effect", [ TUnit ]))) then
+            if not (typ_eq (type_of_texpr k) (TCons ("Effect", [ TUnit ]))) then
               typing_error (fst e) "le type attendu est Effect Unit";
             k)
           l
@@ -319,33 +305,33 @@ let rec typ_exp global_env type_env
       match bl with
       | [] -> raise (EmptyPatternMatching (fst e))
       | b :: tail ->
-          let tau = typ_branch global_env type_env instance_env (personne t) global b in
+          let tau = typ_branch global_env type_env instance_env (type_of_texpr t) global b in
           List.iter
             (fun x ->
               if
                 not
-                  (typ_eq (personne (snd tau))
-                     (personne (snd(typ_branch global_env type_env instance_env (personne t) global x))))
+                  (typ_eq (type_of_texpr (snd tau))
+                     (type_of_texpr (snd(typ_branch global_env type_env instance_env (type_of_texpr t) global x))))
               then raise (TypingError (fst e, "mauvais type")))
             tail;
           if
             not
-              (exhaustive_list global_env type_env instance_env [ personne t ]
+              (exhaustive_list global_env type_env instance_env [ type_of_texpr t ]
                  (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
           then raise (NonExhaustivePatternMatching (fst e))
-          else TEcase (t, List.map (fun b -> (typ_branch global_env type_env instance_env (personne t) global b)) bl, personne (snd tau)))
+          else TEcase (t, List.map (fun b -> (typ_branch global_env type_env instance_env (type_of_texpr t) global b)) bl, type_of_texpr (snd tau)))
   | Elet (bl, e) ->
       let rec aux global_env type_env instance_env l =
         match l with
         | b :: t ->
             let tau = typ_exp global_env type_env instance_env global (snd b) in
-            aux (add true (fst b) (personne tau) global_env) type_env instance_env t
+            aux (add true (fst b) (type_of_texpr tau) global_env) type_env instance_env t
         | [] -> global_env
       in
       let k = typ_exp
         (aux global_env type_env instance_env bl)
         type_env instance_env global e in
-      TElet(List.map (fun b ->  fst b, typ_exp global_env type_env instance_env global  (snd b)) bl, k, personne k)
+      TElet(List.map (fun b ->  fst b, typ_exp global_env type_env instance_env global  (snd b)) bl, k, type_of_texpr k)
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
@@ -353,7 +339,7 @@ let rec typ_exp global_env type_env
           match (al, tl) with
           | [], [] -> ()
           | h1 :: t1, h2 :: t2 ->
-              if typ_eq (boug (typ_atom global_env type_env instance_env global h1)) h2
+              if typ_eq (type_of_tatom (typ_atom global_env type_env instance_env global h1)) h2
               then aux t1 t2
               else typing_error loc "mauvais types dans le constructeur"
           | _ -> typing_error loc "liste d'arguments de longueur insuffisante"
@@ -396,20 +382,20 @@ let rec typ_exp global_env type_env
                       let tau =
                         typ_atom global_env type_env instance_env global a
                       in
-                      match boug tau with
+                      match type_of_tatom tau with
                       | TAlias _ -> aux t1 t2
                       | _ ->
                           if
                             Smaps.mem s !vars
-                            && not (typ_eq (boug tau) (smaps_find s !vars))
+                            && not (typ_eq (type_of_tatom tau) (smaps_find s !vars))
                           then typing_error (fst a) "les types sont différents"
-                          else vars := Smaps.add s (boug tau) !vars;
+                          else vars := Smaps.add s (type_of_tatom tau) !vars;
                           aux t1 t2)
                   | _ ->
                       if
                         not
                           (typ_eq t
-                             (boug (typ_atom global_env type_env instance_env global a)))
+                             (type_of_tatom (typ_atom global_env type_env instance_env global a)))
                       then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
               | _ -> raise (TooManyArguments loc)
@@ -419,7 +405,7 @@ let rec typ_exp global_env type_env
         with Not_found -> raise (UnknownIdent (loc, id)))
 
 and compat_instances instance_env cident id instances tlist_ global =
-  let tlist = List.map boug tlist_ in 
+  let tlist = List.map type_of_tatom tlist_ in 
   let slist, class_functions, functions = smaps_find cident !class_env in
   let ftlist =
     match smaps_find id class_functions with
@@ -474,11 +460,11 @@ and typ_atom global_env type_env instance_env global (l, a) =
   | Aident id when is_lower id -> (
       try TAident(id, find id global_env) with Not_found -> raise (UnknownIdent (l, id)))
   | Aident id -> TAident(id, (smaps_find id !cons_env).ctyp)
-  | Aexpr e -> let k = typ_exp global_env type_env instance_env global e in TAexpr(typ_exp global_env type_env instance_env global e, personne k)
+  | Aexpr e -> let k = typ_exp global_env type_env instance_env global e in TAexpr(typ_exp global_env type_env instance_env global e, type_of_texpr k)
   | Atypedexpr (e, tau) ->
       let t = ast_type global_env type_env instance_env tau in
       let k = typ_exp global_env type_env instance_env global e in 
-      if typ_eq t (personne k) then TAexpr(k, personne k)
+      if typ_eq t (type_of_texpr k) then TAexpr(k, type_of_texpr k)
         (* TODO: spécifier les deux types *)
       else typing_error (fst e) "l'expression n'est pas du type spécifié."
 
@@ -746,7 +732,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
       else type_env
     in
     let rtexp = typ_exp global_env type_env instance_env deflist (trad defn) in
-    if not (typ_eq (personne rtexp) t) then
+    if not (typ_eq (type_of_texpr rtexp) t) then
       typing_error placeholder_loc "mauvais type de retour"
     else
       fast defn, List.map snd (sand defn), rtexp)

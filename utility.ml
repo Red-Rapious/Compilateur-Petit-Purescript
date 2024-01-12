@@ -1,5 +1,20 @@
 open Ast 
 
+let type_of_texpr = function
+  | TEatom (_, t) -> t
+  | TEunop (_, _, t) -> t
+  | TEbinop (_, _, _, t) -> t
+  | TEfunc (_, _, t) -> t
+  | TEif (_, _, _, t) -> t
+  | TEdo (_, t) -> t
+  | TElet (_, _, t) -> t
+  | TEcase (_, _, t) -> t
+
+let type_of_tatom = function 
+  | TAconst(_, t) -> t
+  | TAident(_, t) -> t
+  | TAexpr(_, t) -> t
+
 let type_of_aexpr = function
 | AEatom (_, t, _) -> t
 | AEunop (_, _, t, _) -> t
