@@ -182,7 +182,7 @@ and aatom =
 | AAident of ttyp * int(* adresse, type *)
 | AAexpr of aexpr * ttyp * int
 
-and abranch = pattern * aexpr
+and abranch = apattern * aexpr
 
 and abinding = int * aexpr
 
@@ -197,6 +197,9 @@ and afdecl = {
 and apatarg = 
 | APconst of constant * int
 | APident of ident * int
+and apattern = 
+| AParg of apatarg
+| APconsarg of ident * (apatarg list)
 
 type adefn = ident * apatarg list * aexpr * frame_size
 

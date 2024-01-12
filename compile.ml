@@ -8,7 +8,6 @@ exception UndefIdent of string
 module Smap = Map.Make(String)
 type local_env = int Smap.t
 
-let (genv : (string, unit) Hashtbl.t) = Hashtbl.create 17
 type tfpcur = (unit -> int)
 
 let create_neg_fpcur () = 
@@ -21,40 +20,40 @@ let create_pos_fpcur () =
 
 (* Décoration de l'AST avec l'allocation des variables *)
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
-let rec alloc_decl (decl:tdecl) : adecl =
+let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
-| TDefn d -> alloc_defn d
+| TDefn d -> alloc_defn genv d
 | TDfdecl d -> alloc_fdecl d
 | TDdata d -> alloc_data d
 | TDclass c -> alloc_class c
 | TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
 
-and alloc_defn (ident, plist, expr) : adecl = 
+and alloc_defn genv (ident, plist, expr) : adecl = 
   let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
 
   let patargs =
     List.map (fun patarg ->
-      let apatarg = alloc_patarg fpcur patarg in
-      (match apatarg with
-      | APident (ident, adr) -> env := Smap.add ident adr !env 
-      | _ -> ()) ;
+      let apatarg, env' = alloc_patarg fpcur patarg in
+      env := Smap.union (
+        fun ident -> raise (Typing.IdentUsedTwice (Typing.placeholder_loc, ident))
+      ) !env env' ;
       apatarg
     ) plist
   in
 
   let fpcur' = create_neg_fpcur () in
-  let a_expr = alloc_expr !env fpcur' expr in 
+  let a_expr = alloc_expr genv !env fpcur' expr in 
   ADefn (ident, patargs, a_expr, abs (fpcur' ()))
 
 (* TODO : second env *)
-and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
+and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
-  let aatom = alloc_atom env fpcur a
+  let aatom = alloc_atom genv env fpcur a
   in AEatom(aatom, t, fpcur ())
 | TEbinop (e1, op, e2, t) -> 
-  let e1' = alloc_expr env fpcur e1 in 
-  let e2' = alloc_expr env fpcur e2 in
+  let e1' = alloc_expr genv env fpcur e1 in 
+  let e2' = alloc_expr genv env fpcur e2 in
   begin
     match op with 
     | Bneq -> 
@@ -63,18 +62,18 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
     | _ -> AEbinop(e1', op, e2', t, fpcur ())
   end
 | TEunop (op, e, t) ->
-  let e' = alloc_expr env fpcur e in 
+  let e' = alloc_expr genv env fpcur e in 
   AEunop (op, e', t, fpcur ())
 | TEif (e1, e2, e3, t) ->
-  let e1' = alloc_expr env fpcur e1 in 
-  let e2' = alloc_expr env fpcur e2 in 
-  let e3' = alloc_expr env fpcur e3 in 
+  let e1' = alloc_expr genv env fpcur e1 in 
+  let e2' = alloc_expr genv env fpcur e2 in 
+  let e3' = alloc_expr genv env fpcur e3 in 
   AEif (e1', e2', e3', t, fpcur ())
 | TEfunc (name, targs, t) ->
-  let aargs = List.map (alloc_atom env fpcur) targs in 
+  let aargs = List.map (alloc_atom genv env fpcur) targs in 
   AEfunc (name, aargs, t, fpcur ())
 | TEdo (expr_list, t) -> 
-  let aexpr_list = List.map (alloc_expr env fpcur) expr_list in
+  let aexpr_list = List.map (alloc_expr genv env fpcur) expr_list in
   AEdo (aexpr_list, t, fpcur ())
 | TElet (binding_list, expr, typ) ->
   (* TODO: faire les deux boucles en une seule *)
@@ -88,7 +87,7 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
   (* allocation des expressions dans le binding *)
   let abinding = List.fold_left (fun l (bident, bexpr) ->
     begin 
-      let expr = alloc_expr env fpcur bexpr in
+      let expr = alloc_expr genv env fpcur bexpr in
       let res_adr = Smap.find bident env in
       (res_adr, expr)
     end :: l
@@ -96,15 +95,18 @@ and alloc_expr (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function
   in
 
   (* allocation de l'expression dans le in *)
-  let aexpr = alloc_expr env fpcur expr in
+  let aexpr = alloc_expr genv env fpcur expr in
   AElet (abinding, aexpr, typ, fpcur ())
 
-| _ -> failwith "alloc_expr: todo"
+| TEcase (texpr, tblist, t) -> 
+  let aexpr = alloc_expr genv env fpcur texpr 
+  and ablist = List.map (alloc_branch genv env fpcur) tblist in 
+  AEcase (aexpr, ablist, t, fpcur ())
 
-and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
+and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
 | TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, fpcur ())
 | TAexpr (e, t) -> 
-  let aexpr = alloc_expr env fpcur e in 
+  let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> begin
   match ident with
@@ -113,17 +115,38 @@ and alloc_atom (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function
     begin
       match Smap.find_opt ident env with
       | Some c -> AAident (t, c)
-      | None -> raise (UndefIdent ident)
+      | None -> begin
+        match Smap.find_opt ident genv with
+        | Some c -> 
+          let address = fpcur () in 
+          AAident (t, address)
+        | None -> raise (UndefIdent ident)
+      end
     end
   end
 
-and alloc_patarg fpcur p = 
-match p with 
-| Pconst c -> APconst (c, fpcur ())
-| Pident i -> APident (i, fpcur ())
+and alloc_patarg fpcur = function
+| Pconst c -> APconst (c, fpcur ()), Smap.empty
+| Pident i -> 
+  let address = fpcur ()
+  and env = Smap.empty in
+  APident (i, fpcur ()), Smap.add i address env
 | _ -> failwith "alloc_patarg: todo"
 
-and alloc_branch (env: local_env) (fpcur: tfpcur) b = failwith "alloc_branch: todo"
+and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
+  let apattern, env' = alloc_pattern fpcur tpattern in 
+  let union_env = Smap.union (fun id address1 _ -> 
+    if id = "_" then Some address1 
+    else failwith "cette union est sensé réussir"
+  ) env env' in
+  (apattern, alloc_expr genv union_env fpcur texpr)
+
+and alloc_pattern fpcur = function 
+| Parg (l, tpatarg) -> 
+  (* TODO : se débarasser de la localisation *)
+  let apatarg, env = alloc_patarg fpcur tpatarg in 
+  AParg apatarg, env
+| _ -> failwith "alloc_pattern: todo"
 and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: tood"
 and alloc_fdecl fdecl = ADfdecl {
   aname = fdecl.tname ;
@@ -132,10 +155,10 @@ and alloc_fdecl fdecl = ADfdecl {
   atypes = fdecl.ttypes;
   aout_type = fdecl.tout_type
 }
-and alloc_data data = failwith "alloc_data: todo"
+and alloc_data data = ADdata data
 and alloc_class c = failwith "alloc_class: todo"
 
-let alloc = List.map alloc_decl
+let alloc genv = List.map (alloc_decl genv)
 
 
 (* Production du code *)
@@ -373,11 +396,22 @@ and compile_atom = function
 | AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
 
 let compile_program (p : tdecl list) ofile =
-  let p = alloc p in
-  (*Format.eprintf "%a@." print p;*)
+  (* ajout des data à l'environnement global *)
+  let genv = ref Smap.empty in
+  List.iter (function
+  | TDdata data -> 
+    let data_constr = ref Smap.empty in
+    List.iter (fun (ident, t) -> data_constr := Smap.add ident t !data_constr) data.types ;
+    genv := Smap.union (fun _ -> 
+      failwith "deux constructions de data ont le même nom. Cette erreur devrait être soulevée au typage.") 
+      !genv !data_constr
+  | _ -> ()
+  ) p ;
+
+  let p = alloc !genv p in
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in
   
-  let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) genv
+  let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) (Hashtbl.create 17)
   begin
     label ".Sprint_int" ++ string "%d\n" ++
     label ".Sprint_string" ++ string "%s\n" ++
