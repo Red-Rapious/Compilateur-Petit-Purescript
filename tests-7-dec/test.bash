@@ -162,14 +162,20 @@ for f in exec/*.purs; do
 	    else
 		echo
 		echo "ECHEC : mauvaise sortie pour $f"
+		echo
+		echo
 	    fi
 	else
 		echo
 		echo "ECHEC du code produit pour $f"
+		echo
+		echo
 	fi
     else
 	echo
 	echo "ECHEC de la compilation sur $f (devrait réussir)"
+	echo
+	echo
     fi
 done
 echo

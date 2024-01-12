@@ -268,9 +268,15 @@ let rec typ_exp global_env type_env
                ^ "' : les expressions comparées doivent être de type TInt, \
                   String ou Bool"))
       | Blt | Ble | Bgt | Bge -> (
-          (* TODO: convertir les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
-          match personne s1 with
-          | TInt -> TEbinop (s1, op, s2, TBool)
+        match personne s1 with
+        | TInt -> begin
+              (* on convertit les Bgt et Bge en Blt et Ble en inversant les deux expressions *)
+              match op with
+              | Blt | Ble -> TEbinop (s1, op, s2, TBool)
+              | Bgt -> TEbinop (s2, Blt, s1, TBool)
+              | Bge -> TEbinop (s1, Ble, s2, TBool)
+              | _ -> failwith ""
+            end
           | _ ->
               typing_error (fst e1)
                 ("mauvais opérande pour l'opérateur '" ^ binop_string

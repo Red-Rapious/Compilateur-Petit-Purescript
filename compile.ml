@@ -321,7 +321,8 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
     compile_binop_compare (e1, Beq, e2, t, res_adr) ++
     call "not" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)
-  | _ -> failwith "ce cas est sensé avoir été traité par compile_binop"
+  | Bconcat -> failwith "todo: concat"
+  | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
 and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
   let cmp_is_true = ".cmp_is_true_" ^ uid
