@@ -152,16 +152,16 @@ let rec compile_decl = function
 | ADfdecl d -> nop
 | _ -> failwith "compile_decl: todo"
 
-and compile_defn (ident, patargs, expr, fpmax) = 
-  (*Pretty.pp_aexpr std_formatter 0 expr ;*)
+and compile_defn (ident, patargs, aexpr, fpmax) = 
+  (*Pretty.pp_aexpr std_formatter 0 aexpr ;*)
   label ident ++
   enter (imm (round_16 (abs fpmax))) ++
 
-  compile_expr expr ++
+  compile_expr aexpr ++
   begin 
-    match type_of_aexpr expr with
+    match type_of_aexpr aexpr with
     | TUnit | TCons ("Effect", [TUnit]) -> movq (imm 0) (reg rax)
-    | _ -> failwith "unsupported type of defn to compile"
+    | _ -> movq (ind ~ofs:(address_of_aexpr aexpr) rbp) (reg rax)
   end
   ++
 

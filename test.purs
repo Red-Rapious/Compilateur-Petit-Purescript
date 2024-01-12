@@ -4,6 +4,12 @@ import Prelude
 import Effect
 import Effect.Console
 
+f:: String -> String -> String
+f x y = x
+
 main :: Effect Unit
-main = log ("hello" <> " world")
+main = do
+  log (f "a" "b")
+  log (f "b" "a")
+
 

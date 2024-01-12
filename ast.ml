@@ -144,10 +144,9 @@ and tfdecl = {
   tout_type: ttyp
 }
 
-
-and tpattern = 
+(*and tpattern = 
 | TParg of patarg
-| TPconsarg of ident * (patarg list)
+| TPconsarg of ident * (patarg list)*)
 
 
 type tdefn = ident * patarg list * texpr
