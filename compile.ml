@@ -168,11 +168,13 @@ let round_16 a = match a mod 16 with
 
 let comparaison_count = ref 0
 let if_count = ref 0
+let branch_count = ref 0
 let hardcoded_strings = ref []
 
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
 | ADfdecl d -> nop
+| ADdata data -> nop
 | _ -> failwith "compile_decl: todo"
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 
@@ -212,8 +214,8 @@ and compile_expr = function
   call begin match name with
   | "show" -> begin
       match type_of_aatom (List.hd params) with 
-      | TInt -> "print_int"
-      | TBool -> "print_bool"
+      | TInt -> ".print_int"
+      | TBool -> ".print_bool"
       | _ -> failwith "unsupported show"
     end
   | _ -> name
@@ -282,7 +284,14 @@ and compile_expr = function
   compile_expr aexpr ++
   movq (ind ~ofs:(address_of_aexpr aexpr) rbp) (reg rax) ++
   movq (reg rax) (ind ~ofs:res_adr rbp)
-| _ -> failwith "compile_expr: todo"
+| AEcase (aexpr, blist, t, res_adr) -> 
+  let branch_exit_label = ".branch_exit_" ^ (string_of_int !branch_count) in 
+  incr branch_count ;
+  compile_expr aexpr ++
+  List.fold_left (fun code (bpattern, bexpr) ->
+    compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern ++ code
+  ) (movq (imm 0) (ind ~ofs:res_adr rbp)) blist ++
+  label branch_exit_label
 
 and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
@@ -378,7 +387,12 @@ and compile_atom = function
   movq (ind ~ofs:res_adr rbp) (reg rax) ++
   movq (reg rax) (ind ~ofs:(address_of_aexpr expr) rbp)
 | AAconst (c, c_adr, t, res_adr) -> 
-  (* TODO : histoire louche. est-ce qu'il faut vraiment c_adr ?*)
+  compile_const c res_adr ++
+  movq (ind ~ofs:res_adr rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:c_adr rbp)
+| AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+
+and compile_const c adr = 
   let ptr = match c with
   (* si c'est une constante facile, on la représente par un immédiat *)
   | Cint i -> imm i
@@ -390,10 +404,31 @@ and compile_atom = function
     hardcoded_strings := (str_label, s) :: !hardcoded_strings ;
     (ilab str_label)
   in
-  movq ptr (ind ~ofs:res_adr rbp) ++
-  movq (ind ~ofs:res_adr rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:c_adr rbp)
-| AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+  movq ptr (ind ~ofs:adr rbp)
+
+and compile_pattern condition_adr res_adr expr_adr end_label = function 
+| AParg (patarg) -> begin 
+    match patarg with
+    | APconst (c, adr) -> 
+      let branch_true_label = ".branch_true_" ^ (string_of_int !branch_count) in 
+      incr branch_count ;
+
+      compile_const c (failwith "adress") ++
+      movq (ind ~ofs:condition_adr rbp) (reg r8) ++
+      movq (ind ~ofs:(failwith "find address of const") rbp) (reg r9) ++
+      cmpq (reg r8) (reg r9) ++
+      
+      (* si le pattern ne match pas, on va au prochain cas *)
+      jne branch_true_label ++
+      (* sinon, on exécute l'expression de la branche *)
+      compile_expr expr_adr ++
+      movq (ind ~ofs:(address_of_aexpr expr_adr) rbp) (reg rax) ++
+      movq (reg rax) (ind ~ofs:res_adr rbp) ++
+      jmp end_label ++ (* et on finit *)
+      label branch_true_label
+    | _ -> failwith "compilte_pattern: todo AParg"
+  end
+| APconsarg (id, plist) -> failwith "compile_pattern: todo APconsarg"
 
 let compile_program (p : tdecl list) ofile =
   (* ajout des data à l'environnement global *)
@@ -401,6 +436,7 @@ let compile_program (p : tdecl list) ofile =
   List.iter (function
   | TDdata data -> 
     let data_constr = ref Smap.empty in
+    (* TODO : hash ? *)
     List.iter (fun (ident, t) -> data_constr := Smap.add ident t !data_constr) data.types ;
     genv := Smap.union (fun _ -> 
       failwith "deux constructions de data ont le même nom. Cette erreur devrait être soulevée au typage.") 
@@ -431,7 +467,7 @@ let compile_program (p : tdecl list) ofile =
 
         (* afficheur d'entiers *)
         (* TODO : personnaliser *)
-        label "print_int" ++
+        label ".print_int" ++
         enter (imm 0) ++
         movq (imm 24) (reg rdi) ++
         call "malloc" ++
@@ -461,7 +497,7 @@ let compile_program (p : tdecl list) ofile =
         (* la fonction pure de purescript *)
         label "pure" ++
         enter (imm 0) ++
-        (*movq (imm 0) (reg rax) ++*)
+        movq (imm 0) (reg rax) ++ (* retourne toujours 0 *)
         leave ++
         ret ++
 
@@ -576,7 +612,7 @@ let compile_program (p : tdecl list) ofile =
         ret ++
 
         (* afficheur de booléen *)
-        label "print_bool" ++
+        label ".print_bool" ++
         enter (imm 0) ++
         cmpq (imm 0) (ind ~ofs:16 rbp) ++
         je ".Lfalse" ++

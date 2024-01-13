@@ -4,13 +4,9 @@ import Prelude
 import Effect
 import Effect.Console
 
-data T = A | B
-
-foo:: T -> String
-foo x = case x of A -> "hello"
-                  B -> "world"
-
 main :: Effect Unit
-main = do log (foo A)
-          log (foo B)
-
+main = do
+  log (if false && true then "oups" else "phew...")
+  log (if true || false then "phew..." else "oups")
+  log (if 1 > 2 && 1/0 > 2 then "oups" else "phew...")
+  log (if 1 < 2 || 1/0 > 2 then "phew..." else "oups")
