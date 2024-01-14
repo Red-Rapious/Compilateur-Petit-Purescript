@@ -104,7 +104,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   AEcase (aexpr, ablist, t, fpcur ())
 
 and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
-| TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, fpcur ())
+| TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, c_adr)
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
@@ -333,13 +333,15 @@ and compile_lazy_binop (e1, binop, e2, t, res_adr) =
   let lazy_continue = ".lazy_continue_" ^ uid
   and lazy_end = ".lazy_end_" ^ uid in 
   let instruction, default = match binop with 
-  | Bor -> je, 1
-  | Band -> jne, 0
+  | Bor -> jne, 1
+  | Band -> je, 0
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
   in
+  compile_expr e1 ++
   movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg r8) ++
   testq (reg r8) (reg r8) ++
   instruction lazy_continue ++
+
   compile_expr e2 ++
   movq (ind ~ofs:(address_of_aexpr e2) rbp) (reg rax) ++
   movq (reg rax) (ind ~ofs:res_adr rbp) ++
@@ -413,6 +415,7 @@ and compile_atom = function
   movq (reg rax) (ind ~ofs:(address_of_aexpr expr) rbp)
 | AAconst (c, c_adr, t, res_adr) -> 
   compile_const c res_adr ++
+  (* TODO: ce serait beaucoup plus logique de faire l'inverse ???!! *)
   movq (ind ~ofs:res_adr rbp) (reg rax) ++
   movq (reg rax) (ind ~ofs:c_adr rbp)
 | AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
