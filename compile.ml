@@ -167,6 +167,7 @@ let round_16 a = match a mod 16 with
 | i -> a + 16-i
 
 let comparaison_count = ref 0
+let lazy_count = ref 0
 let if_count = ref 0
 let branch_count = ref 0
 let hardcoded_strings = ref []
@@ -230,11 +231,14 @@ and compile_expr = function
 
   (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
   (if ((List.length params) mod 2) = 1 then popq r8 else nop) ++
+  (* TODO : choisir *)
+  (*let pop_size = round_16 (8*List.length params) in addq (imm pop_size) (reg rsp) ++*)
   movq (reg rax) (ind ~ofs:res_adr rbp)
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
     match binop with
-    | Badd | Bsub | Bmul | Bdiv | Bor | Band | Bconcat -> compile_binop (e1, binop, e2, t, a)
+    | Badd | Bsub | Bmul | Bdiv | Bconcat -> compile_binop (e1, binop, e2, t, a)
+    | Band | Bor -> compile_lazy_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
 | AEunop (Uneg, aexpr, t, res_adr) ->
@@ -295,7 +299,7 @@ and compile_expr = function
 
 and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
-  compile_expr e2 ++
+  compile_expr e2 ++ (* TODO: déplacer la compilation de e2 pour passer lazy.purs *)
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
@@ -316,14 +320,35 @@ and compile_binop (e1, binop, e2, t, res_adr) =
     | Badd -> addq
     | Bsub -> subq 
     | Bmul -> imulq
-    | Bor -> orq
-    | Band -> andq
     | _ -> failwith "ce cas n'est pas sensé se produire"
     in 
     movq (ind ~ofs:a1 rbp) (reg r8) ++
     instruction (ind ~ofs:a2 rbp) (reg r8) ++
     movq (reg r8) (ind ~ofs:res_adr rbp)
   end
+
+and compile_lazy_binop (e1, binop, e2, t, res_adr) = 
+  let uid = string_of_int !lazy_count in 
+  incr lazy_count ;
+  let lazy_continue = ".lazy_continue_" ^ uid
+  and lazy_end = ".lazy_end_" ^ uid in 
+  let instruction, default = match binop with 
+  | Bor -> je, 1
+  | Band -> jne, 0
+  | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
+  in
+  movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg r8) ++
+  testq (reg r8) (reg r8) ++
+  instruction lazy_continue ++
+  compile_expr e2 ++
+  movq (ind ~ofs:(address_of_aexpr e2) rbp) (reg rax) ++
+  movq (reg rax) (ind ~ofs:res_adr rbp) ++
+  jmp lazy_end ++
+
+  label lazy_continue ++
+  movq (imm default) (ind ~ofs:res_adr rbp) ++
+  
+  label lazy_end
 
 and compile_binop_compare (e1, binop, e2, t, res_adr) = 
   compile_expr e1 ++
@@ -455,7 +480,7 @@ let compile_program (p : tdecl list) ofile =
     label "false" ++ string "false" ++
     List.fold_left (fun code (label_name, str) ->
       code ++ label label_name ++ string str
-    ) nop !hardcoded_strings
+    ) nop (List.rev !hardcoded_strings)
   end
   in
 
