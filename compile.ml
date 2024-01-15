@@ -130,7 +130,7 @@ and alloc_patarg fpcur = function
 | Pident i -> 
   let address = fpcur ()
   and env = Smap.empty in
-  APident (i, fpcur ()), Smap.add i address env
+  APident (i, address), Smap.add i address env
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
@@ -165,6 +165,12 @@ let alloc genv = List.map (alloc_decl genv)
 let round_16 a = match a mod 16 with
 | 0 -> a
 | i -> a + 16-i
+
+let move_stack ofs1 ofs2 = 
+  if ofs1 <> ofs2 then 
+    movq (ind ~ofs:ofs1 rbp) (reg rdx) ++
+    movq (reg rdx) (ind ~ofs:ofs2 rbp)
+  else nop
 
 let comparaison_count = ref 0
 let lazy_count = ref 0
@@ -414,10 +420,8 @@ and compile_atom = function
   movq (ind ~ofs:res_adr rbp) (reg rax) ++
   movq (reg rax) (ind ~ofs:(address_of_aexpr expr) rbp)
 | AAconst (c, c_adr, t, res_adr) -> 
-  compile_const c res_adr ++
-  (* TODO: ce serait beaucoup plus logique de faire l'inverse ???!! *)
-  movq (ind ~ofs:res_adr rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:c_adr rbp)
+  compile_const c c_adr ++
+  move_stack c_adr res_adr
 | AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
 
 and compile_const c adr = 

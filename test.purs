@@ -4,9 +4,10 @@ import Prelude
 import Effect
 import Effect.Console
 
+f:: String -> String -> String -> String -> Effect Unit
+f x y z t = if x /= "d" then do log x
+                                f y z t x
+                        else pure unit
+
 main :: Effect Unit
-main = do
-  log (if false && true then "oups" else "phew...")
-  log (if true || false then "phew..." else "oups")
-  log (if 1 > 2 && 1/0 > 2 then "oups" else "phew...")
-  log (if 1 < 2 || 1/0 > 2 then "phew..." else "oups")
+main = f "a" "b" "c" "d"
