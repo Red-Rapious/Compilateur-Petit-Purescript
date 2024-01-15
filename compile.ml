@@ -166,6 +166,7 @@ let round_16 a = match a mod 16 with
 | 0 -> a
 | i -> a + 16-i
 
+(* fonction utilitaire pour déplacer une valeur de la pile vers la pile *)
 let move_stack ofs1 ofs2 = 
   if ofs1 <> ofs2 then 
     movq (ind ~ofs:ofs1 rbp) (reg rdx) ++
@@ -203,8 +204,7 @@ and compile_defn (ident, patargs, aexpr, fpmax) =
 and compile_expr = function 
 | AEatom (at, t, res_adr) -> 
   compile_atom at ++
-  movq (ind ~ofs:(address_of_aatom at) rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:res_adr rbp)
+  move_stack (address_of_aatom at) res_adr
 | AEfunc (name, params, types, res_adr) -> 
   (* production du code de calcul des paramètres *)
   List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
@@ -276,8 +276,7 @@ and compile_expr = function
   (* si la condition est vraie *)
   label if_case_true ++
   compile_expr e2 ++
-  movq (ind ~ofs:(address_of_aexpr e2) rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:res_adr rbp)  ++
+  move_stack (address_of_aexpr e2) res_adr ++
 
   label if_exit
 
@@ -292,8 +291,7 @@ and compile_expr = function
   (* on compile l'expression dans le in, 
      et on met son résultat à la bonne position *)
   compile_expr aexpr ++
-  movq (ind ~ofs:(address_of_aexpr aexpr) rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:res_adr rbp)
+  move_stack (address_of_aexpr aexpr) res_adr
 | AEcase (aexpr, blist, t, res_adr) -> 
   let branch_exit_label = ".branch_exit_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
@@ -349,8 +347,7 @@ and compile_lazy_binop (e1, binop, e2, t, res_adr) =
   instruction lazy_continue ++
 
   compile_expr e2 ++
-  movq (ind ~ofs:(address_of_aexpr e2) rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:res_adr rbp) ++
+  move_stack (address_of_aexpr e2) res_adr ++
   jmp lazy_end ++
 
   label lazy_continue ++
@@ -417,8 +414,7 @@ and comparaison_code instruction a1 a2 res_adr =
 and compile_atom = function 
 | AAexpr (expr, t, res_adr) -> 
   compile_expr expr ++
-  movq (ind ~ofs:res_adr rbp) (reg rax) ++
-  movq (reg rax) (ind ~ofs:(address_of_aexpr expr) rbp)
+  move_stack res_adr (address_of_aexpr expr)
 | AAconst (c, c_adr, t, res_adr) -> 
   compile_const c c_adr ++
   move_stack c_adr res_adr
@@ -454,8 +450,7 @@ and compile_pattern condition_adr res_adr expr_adr end_label = function
       jne branch_true_label ++
       (* sinon, on exécute l'expression de la branche *)
       compile_expr expr_adr ++
-      movq (ind ~ofs:(address_of_aexpr expr_adr) rbp) (reg rax) ++
-      movq (reg rax) (ind ~ofs:res_adr rbp) ++
+      move_stack (address_of_aexpr expr_adr) res_adr ++
       jmp end_label ++ (* et on finit *)
       label branch_true_label
     | _ -> failwith "compilte_pattern: todo AParg"
