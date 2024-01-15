@@ -6,6 +6,7 @@ open Ast
 (* Option de compilation, pour s'arrêter à l'issue du parser *)
 let parse_only = ref false
 let type_only = ref false
+let dbg = ref false
 
 (* Nom des fichiers input et output *)
 let ifile = ref ""
@@ -16,8 +17,9 @@ let set_file f s = f := s
 (* Les options du compilateur que l'on affiche avec --help *)
 let options =
   ["--parse-only", Arg.Set parse_only, "  Réaliser uniquement la phase d'analyse syntaxique";
-  "--type-only", Arg.Set type_only, " Réaliser uniquement l'analyse syntaxique et sémantique";
-  "-o", Arg.String (set_file ofile), "<file>  Pour indiquer le nom du fichier de sortie"
+  "--type-only", Arg.Set type_only, "   Réaliser uniquement l'analyse syntaxique et sémantique";
+  "-o", Arg.String (set_file ofile), "<file>      Pour indiquer le nom du fichier de sortie";
+  "--dbg", Arg.Set dbg, "         Active le mode de débogage, affichant notamment l'AST alloué"
   ]
 
 let usage = "usage: ppurs [options] file.purs"
@@ -79,7 +81,7 @@ let () =
        n'est détectée.
        La fonction Lexer.token est utilisée par Parser.prog pour obtenir
        le prochain token. *)
-    let program = Parser.file (Indenter.indent true) buf  in
+    let program = Parser.file (Indenter.indent true) buf in
     close_in f;
 
     (* On s'arrête ici si on ne veut faire que le parsing *)
@@ -90,7 +92,7 @@ let () =
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
 
-    Compile.compile_program typed_file.tmain !ofile
+    Compile.compile_program typed_file.tmain !ofile !dbg
   with
     (* Erreur lexicale *)
     | Lexer.Lexing_error c ->

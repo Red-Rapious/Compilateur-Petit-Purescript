@@ -20,6 +20,11 @@ testc: ppurs
 	gcc -g -no-pie test.s
 	./a.out
 
+testd: ppurs
+	./ppurs test.purs --dbg
+	gcc -g -no-pie test.s
+	./a.out
+
 tests:
 	@echo "'make tests' n'est pas une commande valide. Essayez 'make tests1', 'make tests2', ou 'make tests3'."
 

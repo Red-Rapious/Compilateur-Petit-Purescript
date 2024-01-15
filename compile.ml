@@ -4,7 +4,9 @@ open Ast
 open Utility
 
 exception UndefIdent of string
+let dbg = ref false
 
+(* ALLOCATION DES VARIABLES *)
 module Smap = Map.Make(String)
 type local_env = int Smap.t
 
@@ -18,7 +20,6 @@ let create_pos_fpcur () =
   let fpcur = ref 8 in 
   (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
-(* Décoration de l'AST avec l'allocation des variables *)
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
@@ -161,7 +162,7 @@ and alloc_class c = failwith "alloc_class: todo"
 let alloc genv = List.map (alloc_decl genv)
 
 
-(* Production du code *)
+(* PRODUCTION DU CODE *)
 let round_16 a = match a mod 16 with
 | 0 -> a
 | i -> a + 16-i
@@ -179,6 +180,11 @@ let if_count = ref 0
 let branch_count = ref 0
 let hardcoded_strings = ref []
 
+let include_print_bool = ref false
+let include_print_int = ref false
+let include_div = ref false
+let include_concat = ref false
+
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
 | ADfdecl d -> nop
@@ -186,7 +192,7 @@ let rec compile_decl = function
 | _ -> failwith "compile_decl: todo"
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 
-  (*Pretty.pp_aexpr std_formatter 0 aexpr ;*)
+  if !dbg then Pretty.pp_aexpr std_formatter 0 aexpr ;
   label ident ++
   enter (imm (round_16 (abs fpmax))) ++
 
@@ -221,8 +227,8 @@ and compile_expr = function
   call begin match name with
   | "show" -> begin
       match type_of_aatom (List.hd params) with 
-      | TInt -> ".print_int"
-      | TBool -> ".print_bool"
+      | TInt -> include_print_int := true ; ".print_int"
+      | TBool -> include_print_bool := true ; ".print_bool"
       | _ -> failwith "unsupported show"
     end
   | _ -> name
@@ -307,12 +313,14 @@ and compile_binop (e1, binop, e2, t, res_adr) =
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
+    include_div := true ;
     pushq (ind ~ofs:a2 rbp) ++
     pushq (ind ~ofs:a1 rbp) ++
     call ".div" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)
   end
   else if binop = Bconcat then begin 
+    include_concat := true ;
     pushq (ind ~ofs:a2 rbp) ++
     pushq (ind ~ofs:a1 rbp) ++
     call ".concat" ++
@@ -457,7 +465,8 @@ and compile_pattern condition_adr res_adr expr_adr end_label = function
   end
 | APconsarg (id, plist) -> failwith "compile_pattern: todo APconsarg"
 
-let compile_program (p : tdecl list) ofile =
+let compile_program (p : tdecl list) ofile dbg_mode =
+  dbg := dbg_mode ;
   (* ajout des data à l'environnement global *)
   let genv = ref Smap.empty in
   List.iter (function
@@ -493,6 +502,7 @@ let compile_program (p : tdecl list) ofile =
         code ++
 
         (* afficheur d'entiers *)
+        begin if !include_print_int then begin (* n'ajoute le code de la fonction que s'il est réellement utilisé *)
         (* TODO : personnaliser *)
         label ".print_int" ++
         enter (imm 0) ++
@@ -509,7 +519,9 @@ let compile_program (p : tdecl list) ofile =
         addq (reg rax) (reg r8) ++  (* pour retirer le dernier charactère *)
         movb (imm 0) (ind ~ofs:(-1) r8) ++
         leave ++
-        ret ++
+        ret 
+        end else nop end ++
+
 
         (* fonction log de purescript *)
         label "log" ++
@@ -548,6 +560,7 @@ let compile_program (p : tdecl list) ofile =
         (* fonction de division *)
         (* la complexité vient du fait que idivq peut retourner 
           un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
+        begin if !include_div then begin
         label ".div" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++
@@ -583,7 +596,8 @@ let compile_program (p : tdecl list) ofile =
         label ".decq_leave" ++
         decq (reg rax) ++
         leave ++
-        ret ++
+        ret
+        end else nop end ++
 
         (* fonction mod de purescript *)
         (* là encore, la complexité vient du fait que idivq peut retourner 
@@ -639,6 +653,7 @@ let compile_program (p : tdecl list) ofile =
         ret ++
 
         (* afficheur de booléen *)
+        begin if !include_print_bool then begin
         label ".print_bool" ++
         enter (imm 0) ++
         cmpq (imm 0) (ind ~ofs:16 rbp) ++
@@ -650,9 +665,11 @@ let compile_program (p : tdecl list) ofile =
         label ".Lfalse" ++
         movq (ilab "false") (reg rax) ++
         leave ++
-        ret ++
+        ret
+        end else nop end ++
 
         (* fonction de concaténation de deux strings *)
+        begin if !include_concat then begin
         label ".concat" ++
         enter (imm 0) ++
         (* calcul de la longueur de la première chaîne *)
@@ -677,6 +694,7 @@ let compile_program (p : tdecl list) ofile =
         movq (reg r8) (reg rax) ++
         leave ++
         ret
+        end else nop end
       ;
       data = data
     }
