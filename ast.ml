@@ -104,14 +104,14 @@ type file = { module_name: string ; main : decl list }
 
 (* Types pour le typage *)
 type ttyp =
-  | TUnit
-  | TBool
-  | TInt
-  | TStr
-  | TArrow of ttyp list * ttyp
-  | TVar of tvar
-  | TCons of string * ttyp list
-  | TAlias of string
+| TUnit
+| TBool
+| TInt
+| TStr
+| TArrow of ttyp list * ttyp
+| TVar of tvar
+| TCons of string * ttyp list
+| TAlias of string
 
 and tvar = { id : int; mutable def : ttyp option }
 
@@ -179,7 +179,8 @@ type aexpr =
 | AEcase of aexpr * (abranch list) * ttyp * int
 and aatom =
 | AAconst of constant * int * ttyp * int
-| AAident of ttyp * int(* adresse, type *)
+| AAlident of ttyp * int(* adresse, type *)
+| AAuident of int * ttyp * int
 | AAexpr of aexpr * ttyp * int
 
 and abranch = apattern * aexpr
@@ -196,7 +197,8 @@ and afdecl = {
 
 and apatarg = 
 | APconst of constant * int
-| APident of ident * int
+| APlident of ident * int
+| APuident of int * int
 and apattern = 
 | AParg of apatarg
 | APconsarg of ident * (apatarg list)

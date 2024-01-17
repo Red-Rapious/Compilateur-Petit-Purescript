@@ -4,10 +4,13 @@ import Prelude
 import Effect
 import Effect.Console
 
-f:: String -> String -> String -> String -> Effect Unit
-f x y z t = if x /= "d" then do log x
-                                f y z t x
-                        else pure unit
+data T = A | B
+
+foo:: T -> String
+foo x = case x of A -> "hello"
+                  B -> "world"
 
 main :: Effect Unit
-main = f "a" "b" "c" "d"
+main = do log (foo A)
+          log (foo B)
+

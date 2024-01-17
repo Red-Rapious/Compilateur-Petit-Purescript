@@ -178,10 +178,14 @@ match a with
   pp_typ fmt t ;
   Format.fprintf fmt " with const offset %s%d%s and result offset of %s%d%s@." yellow_code i reset_code yellow_code i' reset_code;
   pp_const fmt (depth + 1) c
-| AAident (t, i) -> 
-  Format.fprintf fmt "%sAAident%s of type " blue_code reset_code;
+| AAuident (_, t, i) -> 
+  Format.fprintf fmt "%sAAuident%s of type " blue_code reset_code;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
+| AAlident (t, i) -> 
+  Format.fprintf fmt "%sAAident%s of type " blue_code reset_code;
+  pp_typ fmt t ;
+    Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
 | AAexpr (e, t, i) -> 
   Format.fprintf fmt "%sAAexpr%s of type " blue_code reset_code ;
   pp_typ fmt t ;

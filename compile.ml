@@ -108,29 +108,38 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
-| TAident (ident, t) -> begin
-  match ident with
+| TAident (ident, t) -> 
+  let first_letter = String.get ident 0 in
+  if first_letter = Char.lowercase_ascii first_letter then
+  (match ident with
   | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
   | _ -> 
     begin
       match Smap.find_opt ident env with
-      | Some c -> AAident (t, c)
+      | Some c -> AAlident (t, c)
       | None -> begin
         match Smap.find_opt ident genv with
         | Some c -> 
           let address = fpcur () in 
-          AAident (t, address)
+          AAlident (t, address)
         | None -> raise (UndefIdent ident)
       end
-    end
+    end)
+  else begin
+    let address = fpcur () in 
+    let data_info = failwith "change data_info" (*; Smap.find ident genv*) 
+    in 
+    (* fail s'il y a des paramètres *)
+    AAuident (failwith "todo", data_info, address)
   end
 
 and alloc_patarg fpcur = function
 | Pconst c -> APconst (c, fpcur ()), Smap.empty
 | Pident i -> 
-  let address = fpcur ()
+  failwith "todo: alloc_patarg"
+  (*let address = fpcur ()
   and env = Smap.empty in
-  APident (i, address), Smap.add i address env
+  APuident (i, address), Smap.add i address env*)
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
@@ -412,7 +421,8 @@ and compile_atom = function
 | AAconst (c, c_adr, t, res_adr) -> 
   compile_const c c_adr ++
   move_stack c_adr res_adr
-| AAident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+| AAlident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+| AAuident _ -> failwith "todo: AAUident"
 
 and compile_const c adr = 
   let ptr = match c with
@@ -428,7 +438,7 @@ and compile_const c adr =
   in
   movq ptr (ind ~ofs:adr rbp)
 
-and compile_pattern condition_adr res_adr expr_adr end_label = function 
+and compile_pattern condition_adr res_adr expr_true end_label = function 
 | AParg (patarg) -> begin 
     match patarg with
     | APconst (c, adr) -> 
@@ -443,12 +453,26 @@ and compile_pattern condition_adr res_adr expr_adr end_label = function
       (* si le pattern ne match pas, on va au prochain cas *)
       jne branch_true_label ++
       (* sinon, on exécute l'expression de la branche *)
-      compile_expr expr_adr ++
-      move_stack (address_of_aexpr expr_adr) res_adr ++
+      compile_expr expr_true ++
+      move_stack (address_of_aexpr expr_true) res_adr ++
       jmp end_label ++ (* et on finit *)
       label branch_true_label
-    | _ -> failwith "compilte_pattern: todo AParg"
-  end
+    | APlident (id, adr) -> 
+        move_stack condition_adr adr ++
+        compile_expr expr_true ++
+        move_stack (address_of_aexpr expr_true) res_adr ++
+        jmp end_label
+    | APuident (uid, adr) ->
+        let branch_true_label = ".branch_true_" ^ (string_of_int !branch_count) in 
+        incr branch_count ;
+        movq (ind ~ofs:condition_adr rbp) (reg r8) ++
+        cmpq (imm uid) (ind r8)++
+        jne end_label ++
+        compile_expr expr_true ++
+        move_stack (address_of_aexpr expr_true) res_adr ++
+        jmp end_label ++
+        label branch_true_label
+    end
 | APconsarg (id, plist) -> failwith "compile_pattern: todo APconsarg"
 
 let compile_program (p : tdecl list) ofile dbg_mode =
