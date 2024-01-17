@@ -169,7 +169,38 @@ let rec pp_aexpr fmt depth = function
   ident fmt depth ;
   Format.fprintf fmt "List of contained expressions:@." ;
   List.iter (pp_aexpr fmt (depth + 1)) elist
-| _ ->   ident fmt depth ; Format.fprintf fmt "%sTHIS PART IS NOT SUPPORTED BY THE PRETTY PRINTER%s" red_code reset_code
+| AElet (bind_list, expr, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "%sAElet%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
+  ident fmt depth ;
+  Format.fprintf fmt "List of bindings:@." ;
+  List.iter (fun (uid, expr) -> 
+      ident fmt (depth + 1) ;
+      Format.fprintf fmt "Binding of uid %s%d%s with expression:@." green_code uid reset_code ;
+      pp_aexpr fmt (depth + 1) expr
+    ) bind_list ;
+
+  ident fmt depth ;
+  Format.fprintf fmt "And associated expression:@." ;
+  pp_aexpr fmt (depth + 1) expr
+
+| AEcase (expr, branch_list, t, i) ->
+  ident fmt depth ;
+  Format.fprintf fmt "%sAEcase%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
+  ident fmt depth ;
+  Format.fprintf fmt "List of bindings:@." ;
+  List.iter (fun (pattern, expr) -> 
+      ident fmt (depth + 1) ;
+      Format.fprintf fmt "%sCannot print pattern%s; though, the expression is:@." red_code reset_code ;
+      pp_aexpr fmt (depth + 1) expr
+    ) branch_list ;
+  Format.fprintf fmt "And associated expression:@." ;
+  pp_aexpr fmt (depth + 1) expr
+
 and pp_aatom fmt depth a = 
 ident fmt depth ;
 match a with

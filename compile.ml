@@ -35,7 +35,7 @@ and alloc_defn genv (ident, plist, expr) : adecl =
 
   let patargs =
     List.map (fun patarg ->
-      let apatarg, env' = alloc_patarg fpcur patarg in
+      let apatarg, env' = alloc_patarg genv fpcur patarg in
       env := Smap.union (
         fun ident -> raise (Typing.IdentUsedTwice (Typing.placeholder_loc, ident))
       ) !env env' ;
@@ -109,6 +109,7 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> 
+  (* TODO : séparer TAuident et TAlident *)
   let first_letter = String.get ident 0 in
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
@@ -127,36 +128,39 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
     end)
   else begin
     let address = fpcur () in 
-    let data_info = failwith "change data_info" (*; Smap.find ident genv*) 
+    let data_constr = Smap.find ident genv
     in 
-    (* fail s'il y a des paramètres *)
-    AAuident (failwith "todo", data_info, address)
+    if snd data_constr <> 0 then failwith "wesh ya des paramètres" else
+    AAuident (fst data_constr, t, address)
   end
 
-and alloc_patarg fpcur = function
+and alloc_patarg genv fpcur = function
 | Pconst c -> APconst (c, fpcur ()), Smap.empty
-| Pident i -> 
-  failwith "todo: alloc_patarg"
-  (*let address = fpcur ()
-  and env = Smap.empty in
-  APuident (i, address), Smap.add i address env*)
+| Pident ident -> 
+  let first_letter = String.get ident 0 in
+  if first_letter = Char.lowercase_ascii first_letter then begin
+    let address = fpcur ()
+    and env = Smap.empty in
+    APlident (ident, address), Smap.add ident address env
+  end else 
+    APuident (fst (Smap.find ident genv), fpcur ()), Smap.empty
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
-  let apattern, env' = alloc_pattern fpcur tpattern in 
+  let apattern, env' = alloc_pattern genv fpcur tpattern in 
   let union_env = Smap.union (fun id address1 _ -> 
     if id = "_" then Some address1 
     else failwith "cette union est sensé réussir"
   ) env env' in
   (apattern, alloc_expr genv union_env fpcur texpr)
 
-and alloc_pattern fpcur = function 
+and alloc_pattern genv fpcur = function 
 | Parg (l, tpatarg) -> 
   (* TODO : se débarasser de la localisation *)
-  let apatarg, env = alloc_patarg fpcur tpatarg in 
+  let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
 | _ -> failwith "alloc_pattern: todo"
-and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: tood"
+and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: todo"
 and alloc_fdecl fdecl = ADfdecl {
   aname = fdecl.tname ;
   avariables = fdecl.tvariables;
@@ -422,7 +426,11 @@ and compile_atom = function
   compile_const c c_adr ++
   move_stack c_adr res_adr
 | AAlident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
-| AAuident _ -> failwith "todo: AAUident"
+| AAuident (ident, t, addr) -> 
+  movq (imm 8) (reg rdi) ++
+  call "malloc" ++
+  movq (imm ident) (ind rax) ++
+  movq (reg rax) (ind ~ofs:addr rbp)
 
 and compile_const c adr = 
   let ptr = match c with
@@ -475,6 +483,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
     end
 | APconsarg (id, plist) -> failwith "compile_pattern: todo APconsarg"
 
+let data_count = ref 0
 let compile_program (p : tdecl list) ofile dbg_mode =
   dbg := dbg_mode ;
   (* ajout des data à l'environnement global *)
@@ -482,11 +491,14 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   List.iter (function
   | TDdata data -> 
     let data_constr = ref Smap.empty in
-    (* TODO : hash ? *)
-    List.iter (fun (ident, t) -> data_constr := Smap.add ident t !data_constr) data.types ;
-    genv := Smap.union (fun _ -> 
-      failwith "deux constructions de data ont le même nom. Cette erreur devrait être soulevée au typage.") 
-      !genv !data_constr
+    List.iter (fun (ident, t) -> 
+      let constr = (!data_count, List.length t) in
+      incr data_count ;
+      data_constr := Smap.add ident constr !data_constr) data.types ;
+      
+      genv := Smap.union (fun _ -> 
+        failwith "deux constructions de data ont le même nom. Cette erreur devrait être soulevée au typage."
+      ) !genv !data_constr
   | _ -> ()
   ) p ;
 
