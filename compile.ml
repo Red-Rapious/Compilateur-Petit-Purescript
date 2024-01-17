@@ -47,7 +47,6 @@ and alloc_defn genv (ident, plist, expr) : adecl =
   let a_expr = alloc_expr genv !env fpcur' expr in 
   ADefn (ident, patargs, a_expr, abs (fpcur' ()))
 
-(* TODO : second env *)
 and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
   let aatom = alloc_atom genv env fpcur a
@@ -234,17 +233,9 @@ and compile_expr = function
   | _ -> name
   end ++
 
-  (* on pop les arguments *)
-  List.fold_left (
-    fun code atom -> 
-    (* TODO *)
-    code ++ popq r8
-  ) nop params ++
-
-  (* on n'oublie pas de pop une fois de plus si l'on avait ajouté un immédiat factice *)
-  (if ((List.length params) mod 2) = 1 then popq r8 else nop) ++
-  (* TODO : choisir *)
-  (*let pop_size = round_16 (8*List.length params) in addq (imm pop_size) (reg rsp) ++*)
+  (* on remonte dans la pile *)
+  addq (imm (round_16 (8*List.length params))) (reg rsp) ++
+  (* on place le résultat là où demandé *)
   movq (reg rax) (ind ~ofs:res_adr rbp)
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
@@ -264,7 +255,6 @@ and compile_expr = function
   movq (imm 0) (ind ~ofs:res_adr rbp)
 | AEif (e1, e2, e3, _, res_adr) -> 
   let if_case_true = ".if_case_true_" ^ (string_of_int !if_count)
-  (*and if_case_false = ".if_case_false_" ^ (string_of_int !if_count)*)
   and if_exit = ".if_exit_" ^ (string_of_int !if_count)
   in
   incr if_count ;
@@ -309,7 +299,7 @@ and compile_expr = function
 
 and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
-  compile_expr e2 ++ (* TODO: déplacer la compilation de e2 pour passer lazy.purs *)
+  compile_expr e2 ++
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
   (* le cas de la division est un peu spécial *)
   if binop = Bdiv then begin
@@ -395,10 +385,6 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
     
     label cmp_is_false
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
-  (*| Bneq ->
-    compile_binop_compare (e1, Beq, e2, t, res_adr) ++
-    call "not" ++
-    movq (reg rax) (ind ~ofs:res_adr rbp)*)
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
 and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
