@@ -110,91 +110,91 @@ and pp_TVar fmt = function
   | { def = None; id } -> Format.fprintf fmt "'%d" id
   | { def = Some t; id } -> Format.fprintf fmt "@[<1>('%d := %a)@]" id pp_typ t
 
-let ident fmt depth =
+let indent fmt depth =
   for _ = 1 to depth do 
     Format.fprintf fmt "\t"
   done
 
 let rec pp_aexpr fmt depth = function
 | AEatom (a, t, i) -> 
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEatom%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   pp_aatom fmt (depth + 1) a
 | AEunop (_, e, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEunop%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   pp_aexpr fmt (depth + 1) e
 | AEbinop (e1, b, e2, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEbinop \'%s\'%s of type " blue_code (print_binop b) reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "First expression:@." ;
   pp_aexpr fmt (depth + 1) e1 ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "Second expression:@." ;
   pp_aexpr fmt (depth + 1) e2
 | AEfunc (id, alist, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEfunc%s named %s of type " blue_code reset_code id;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "List of contained atoms:@." ;
   List.iter (pp_aatom fmt (depth + 1)) alist
 | AEif (e1, e2, e3, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEif%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "Condition:@." ;
   pp_aexpr fmt (depth + 1) e1 ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "then:@." ;
   pp_aexpr fmt (depth + 1) e2 ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "else:@." ;
   pp_aexpr fmt (depth + 1) e3
 | AEdo (elist, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEdo%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "List of contained expressions:@." ;
   List.iter (pp_aexpr fmt (depth + 1)) elist
 | AElet (bind_list, expr, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAElet%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "List of bindings:@." ;
   List.iter (fun (uid, expr) -> 
-      ident fmt (depth + 1) ;
+      indent fmt (depth + 1) ;
       Format.fprintf fmt "Binding of uid %s%d%s with expression:@." green_code uid reset_code ;
       pp_aexpr fmt (depth + 1) expr
     ) bind_list ;
 
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "And associated expression:@." ;
   pp_aexpr fmt (depth + 1) expr
 
 | AEcase (expr, branch_list, t, i) ->
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "%sAEcase%s of type " blue_code reset_code ;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
-  ident fmt depth ;
+  indent fmt depth ;
   Format.fprintf fmt "List of bindings:@." ;
   List.iter (fun (pattern, expr) -> 
-      ident fmt (depth + 1) ;
+      indent fmt (depth + 1) ;
       Format.fprintf fmt "%sCannot print pattern%s; though, the expression is:@." red_code reset_code ;
       pp_aexpr fmt (depth + 1) expr
     ) branch_list ;
@@ -202,7 +202,7 @@ let rec pp_aexpr fmt depth = function
   pp_aexpr fmt (depth + 1) expr
 
 and pp_aatom fmt depth a = 
-ident fmt depth ;
+indent fmt depth ;
 match a with
 | AAconst (c, i, t, i') ->
   Format.fprintf fmt "%sAAconst%s of type " blue_code reset_code ;
@@ -210,11 +210,11 @@ match a with
   Format.fprintf fmt " with const offset %s%d%s and result offset of %s%d%s@." yellow_code i reset_code yellow_code i' reset_code;
   pp_const fmt (depth + 1) c
 | AAuident (_, t, i) -> 
-  Format.fprintf fmt "%sAAuident%s of type " blue_code reset_code;
+  Format.fprintf fmt "%sAAuindent%s of type " blue_code reset_code;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
 | AAlident (t, i) -> 
-  Format.fprintf fmt "%sAAident%s of type " blue_code reset_code;
+  Format.fprintf fmt "%sAAindent%s of type " blue_code reset_code;
   pp_typ fmt t ;
     Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
 | AAexpr (e, t, i) -> 
@@ -223,7 +223,7 @@ match a with
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   pp_aexpr fmt (depth + 1) e 
 and pp_const fmt depth c = 
-ident fmt depth ;
+indent fmt depth ;
 match c with 
 | Cbool b -> Format.fprintf fmt "Cbool %s%b%s@." green_code b reset_code
 | Cstring s -> Format.fprintf fmt "Cstring %s\"%s\"%s@." green_code s reset_code
