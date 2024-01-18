@@ -143,7 +143,7 @@ let rec pp_aexpr fmt depth = function
   pp_aexpr fmt (depth + 1) e2
 | AEfunc (id, alist, t, i) ->
   indent fmt depth ;
-  Format.fprintf fmt "%sAEfunc%s named %s of type " blue_code reset_code id;
+  Format.fprintf fmt "%sAEfunc%s named %s\"%s\"%s of type " blue_code reset_code green_code id reset_code;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
@@ -205,6 +205,8 @@ let rec pp_aexpr fmt depth = function
     ) branch_list ;
   Format.fprintf fmt "-- And associated expression:@." ;
   pp_aexpr fmt (depth + 1) expr
+| _ -> Format.fprintf fmt "%sCannot print AEuident yet%s@." red_code reset_code
+
 
 and pp_pattern fmt depth p =
 indent fmt depth ;

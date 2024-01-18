@@ -71,8 +71,16 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   (* TODO: least counter *)
   AEif (e1', e2', e3', t, fpcur ())
 | TEfunc (name, targs, t) ->
-  let aargs = List.map (alloc_atom genv env fpcur) targs in 
-  AEfunc (name, aargs, t, fpcur ())
+  let first = String.get name 0 in 
+  (* TEfunc *)
+  if first = Char.lowercase_ascii first then begin 
+    let aargs = List.map (alloc_atom genv env fpcur) targs in 
+    AEfunc (name, aargs, t, fpcur ())
+  (* TEuident *)
+  end else begin
+    let aargs = List.map (alloc_atom genv env fpcur) targs in 
+    AEuident (Smap.find name genv, aargs, t, fpcur ()) 
+  end
 | TEdo (expr_list, t) -> 
   let aexpr_list = List.map (alloc_expr genv env fpcur) expr_list in
   AEdo (aexpr_list, t, fpcur ())
@@ -332,11 +340,27 @@ and compile_expr = function
 
   compile_expr aexpr ++
   List.fold_left (fun code (bpattern, bexpr) ->
-    compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern ++
-    code
-  ) (movq (imm 0) (ind ~ofs:res_adr rbp)) blist ++
+    code ++ (* trop longtemps à debug *)
+    compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern
+  ) nop blist ++
+  (movq (imm 0) (ind ~ofs:res_adr rbp))  ++
   
   label branch_exit_label
+
+| AEuident (data_constr, params, types, res_adr) -> 
+  let i = ref 0 in
+  movq (imm (8*(snd data_constr + 1))) (reg rsi) ++
+  call "malloc" ++
+  movq (reg rax) (ind ~ofs:res_adr rbp) ++
+  movq (imm (fst data_constr)) (ind rax) ++
+  List.fold_left (fun code aatom ->
+    incr i ;
+    code ++
+    compile_atom aatom ++
+    movq (ind ~ofs:res_adr rbp) (reg r9) ++
+    movq (ind ~ofs:(address_of_aatom aatom) rbp) (reg rdx) ++
+    movq (reg rdx) (ind ~ofs:(8 * !i) r9)
+  ) nop params
 
 and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
@@ -499,7 +523,6 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         move_stack (address_of_aexpr expr_true) res_adr ++
         jmp end_label
     | APuident (uid, adr) ->
-        Format.printf "branch_continue_%d@." !branch_count ;
         let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
         incr branch_count ;
         movq (ind ~ofs:condition_adr rbp) (reg r8) ++
@@ -513,7 +536,6 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         compile_pattern condition_adr res_adr expr_true end_label pattern
     end
 | APconsarg (uid, plist) ->
-  Format.printf "branch_continue_%d@." !branch_count ;
   let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
   let i = ref 0 in
@@ -545,10 +567,9 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
 | APconst (c, address) -> 
-  Format.printf "const@." ;
-  compile_const c address ++ (* TODO: change address *)
+  compile_const c 420 ++ (* TODO: change address *)
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:address rbp) (reg r8) ++ (* TODO: change address *)
+  movq (ind ~ofs:420 rbp) (reg r8) ++ (* TODO: change address *)
   cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->

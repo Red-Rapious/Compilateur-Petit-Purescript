@@ -24,6 +24,7 @@ let type_of_aexpr = function
 | AEdo (_, t, _) -> t
 | AElet (_, _, t, _) -> t
 | AEcase (_, _, t, _) -> t
+| AEuident (_, _, t, _) -> t
 
 let type_of_aatom = function
 | AAconst (_, _, t, _) -> t
@@ -40,6 +41,7 @@ let address_of_aexpr = function
 | AEdo (_, _, a) -> a
 | AElet (_, _, _, a) -> a
 | AEcase (_, _, _, a) -> a
+| AEuident (_, _, _, a) -> a
 
 let address_of_aatom = function
 | AAconst (_, _, _, a) -> a

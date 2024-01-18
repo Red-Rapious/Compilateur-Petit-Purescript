@@ -181,6 +181,7 @@ type aexpr =
 | AEdo of aexpr list * ttyp * int
 | AElet of abinding list * aexpr * ttyp * int
 | AEcase of aexpr * (abranch list) * ttyp * int
+| AEuident of (int * int) * (aatom list) * ttyp * int
 and aatom =
   (* le permier int est pour l'adresse de la constante
      un peu bancal mais ça marche je crois *)
