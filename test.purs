@@ -7,7 +7,7 @@ import Effect.Console
 data T = A Int | B String
 
 foo:: T -> String
-foo x = case x of A 0 -> "a"
+foo x = case x of A 42 -> "a"
                   A _ -> "b"
                   B s -> s
 

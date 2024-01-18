@@ -195,12 +195,12 @@ let rec pp_aexpr fmt depth = function
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
   Format.fprintf fmt "-- List of bindings:@." ;
-  List.iter (fun (pattern, expr) -> 
+  List.iteri (fun i (pattern, expr) -> 
       indent fmt (depth + 1) ;
-      Format.fprintf fmt "Pattern:@." ;
+      Format.fprintf fmt "Pattern %d:@." i ;
       pp_pattern fmt (depth+2) pattern;
       indent fmt (depth + 1) ;
-      Format.fprintf fmt "Expression:@." ;
+      Format.fprintf fmt "Expression %d:@." i ;
       pp_aexpr fmt (depth + 2) expr
     ) branch_list ;
   Format.fprintf fmt "-- And associated expression:@." ;

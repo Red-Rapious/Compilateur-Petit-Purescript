@@ -499,6 +499,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         move_stack (address_of_aexpr expr_true) res_adr ++
         jmp end_label
     | APuident (uid, adr) ->
+        Format.printf "branch_continue_%d@." !branch_count ;
         let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
         incr branch_count ;
         movq (ind ~ofs:condition_adr rbp) (reg r8) ++
@@ -512,6 +513,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         compile_pattern condition_adr res_adr expr_true end_label pattern
     end
 | APconsarg (uid, plist) ->
+  Format.printf "branch_continue_%d@." !branch_count ;
   let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
   let i = ref 0 in
@@ -519,7 +521,12 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
   movq (ind ~ofs:condition_adr rbp) (reg r8) ++
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label ++
-  List.fold_left (fun code patarg -> incr i ; code ++ compile_patarg_in_cons condition_adr res_adr branch_continue_label !i patarg) nop plist ++
+
+  List.fold_left (fun code patarg -> 
+    incr i ; 
+    code ++ 
+    compile_patarg_in_cons condition_adr res_adr branch_continue_label !i patarg
+  ) nop plist ++
 
   compile_expr expr_true ++
   move_stack (address_of_aexpr expr_true) res_adr ++
@@ -538,6 +545,7 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
 | APconst (c, address) -> 
+  Format.printf "const@." ;
   compile_const c address ++ (* TODO: change address *)
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
   movq (ind ~ofs:address rbp) (reg r8) ++ (* TODO: change address *)
@@ -586,7 +594,7 @@ let compile_program (p : tdecl list) ofile dbg_mode =
     label "false" ++ string "false" ++
     List.fold_left (fun code (label_name, str) ->
       code ++ label label_name ++ string str
-    ) nop (List.rev !hardcoded_strings)
+    ) nop (List.rev !hardcoded_strings) (* le List.rev est juste à des fins décoratives *)
   end
   in
 
