@@ -613,7 +613,7 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
     | _ -> false
   in
   let rec no_dups found i = function
-    | [] -> -1
+    | [] -> i - 1
     | h :: t when is_ident h -> no_dups found (i + 1) t
     | h :: t when found -> raise (MultipleFiltering placeholder_loc)
     | h :: t ->
@@ -636,7 +636,7 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
         let col = no_dups false 0 (List.map snd (sand h)) in
         if col = -1 then (
           if List.length !eqlist > 1 then
-            raise (DoubleDefinition (placeholder_loc, fast h))
+            raise (DoubleDefinition (placeholder_loc, (fast h)))
           else curr_defined := "";
           eqlist := [])
         else
@@ -656,7 +656,7 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
               then raise (NonExhaustivePatternMatching placeholder_loc)
               else curr_defined := "";
               eqlist := []
-          | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow")
+          | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow et je ne sais pas comment c'est")
 
 (* Typage d'une déclaration de fonction *)
 let rec typ_fdecl (global_env : envs) (type_env : type_env)
@@ -702,7 +702,7 @@ let rec typ_fdecl (global_env : envs) (type_env : type_env)
 (* Typage d'une définition *)
 and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
   if
-    deflist && Smaps.mem (fast defn) !function_env && !curr_defined <> fast defn
+    deflist && (Smaps.mem (fast defn) !function_env) && !curr_defined <> fast defn
   then raise (DoubleDefinition (placeholder_loc, fast defn))
   else (
     if deflist then eqlist := defn :: !eqlist;
@@ -885,8 +885,8 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
           (fun (defn : defn) ->
             match frst (smaps_find (fast defn) !function_env) with
             | TArrow (tlist, t) ->
-                typ_defn global_env type_env instance_env false defn
-                  (List.map sub tlist) (sub t); ()
+                ignore(typ_defn global_env type_env instance_env false defn
+                  (List.map sub tlist) (sub t))
             | _ ->
                 failwith "dans typ_instance, le type récupéré n'est pas TArrow")
           fl;
