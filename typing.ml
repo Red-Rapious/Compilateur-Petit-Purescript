@@ -321,17 +321,17 @@ let rec typ_exp global_env type_env
           then raise (NonExhaustivePatternMatching (fst e))
           else TEcase (t, List.map (fun b -> (typ_branch global_env type_env instance_env (type_of_texpr t) global b)) bl, type_of_texpr (snd tau)))
   | Elet (bl, e) ->
-      let rec aux global_env type_env instance_env l =
-        match l with
-        | b :: t ->
-            let tau = typ_exp global_env type_env instance_env global (snd b) in
-            aux (add true (fst b) (type_of_texpr tau) global_env) type_env instance_env t
-        | [] -> global_env
-      in
-      let k = typ_exp
-        (aux global_env type_env instance_env bl)
-        type_env instance_env global e in
-      TElet(List.map (fun b ->  fst b, typ_exp global_env type_env instance_env global  (snd b)) bl, k, type_of_texpr k)
+      let rec aux global_env type_env instance_env l = 
+        match l with 
+        | [] -> [], global_env
+        | b :: t -> let tau = typ_exp global_env type_env instance_env global (snd b) in 
+        let g_env = add true (fst b) (type_of_texpr tau) global_env in 
+        let res, g_env_2 = aux g_env type_env instance_env t in 
+        (fst b, tau)::res, g_env_2
+      in 
+      let tbl, globe_terrestre = aux global_env type_env instance_env bl in 
+      let k = typ_exp globe_terrestre type_env instance_env  global e in 
+      TElet(tbl, k, type_of_texpr k)
   | Efunc (id, al) -> (
       if not (is_lower id) then (
         let constr = Smaps.find id !cons_env in
