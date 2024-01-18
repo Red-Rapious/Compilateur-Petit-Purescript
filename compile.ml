@@ -128,8 +128,7 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
     end)
   else begin
     let address = fpcur () in 
-    let data_constr = Smap.find ident genv
-    in 
+    let data_constr = Smap.find ident genv in 
     if snd data_constr <> 0 then failwith "wesh ya des paramètres" else
     AAuident (fst data_constr, t, address)
   end
@@ -138,10 +137,13 @@ and alloc_patarg genv fpcur = function
 | Pconst c -> APconst (c, fpcur ()), Smap.empty
 | Pident ident -> 
   let first_letter = String.get ident 0 in
+  (* lident *)
   if first_letter = Char.lowercase_ascii first_letter then begin
     let address = fpcur ()
-    and env = Smap.empty in
-    APlident (ident, address), Smap.add ident address env
+    and empt = Smap.empty in
+    APlident (ident, address), Smap.add ident address empt
+
+  (* uident *)
   end else 
     APuident (fst (Smap.find ident genv), fpcur ()), Smap.empty
 | _ -> failwith "alloc_patarg: todo"
@@ -155,7 +157,7 @@ and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) =
   (apattern, alloc_expr genv union_env fpcur texpr)
 
 and alloc_pattern genv fpcur = function 
-| Parg (l, tpatarg) -> 
+| Parg (_, tpatarg) -> 
   (* TODO : se débarasser de la localisation *)
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
@@ -229,7 +231,10 @@ and compile_expr = function
 
   (* on stocke les paramètres *)
   (* s'il y a un nombre impair de paramètres, on rajoute un immédiat nul *)
-  (if ((List.length params) mod 2) = 1 then pushq (imm 0) else nop) ++
+  begin if ((List.length params) mod 2) = 1 then 
+    subq (imm 8) (reg rsp) 
+  else nop end ++
+
   List.fold_left (fun code atom ->
     pushq (ind ~ofs:(address_of_aatom atom) rbp) ++ code
   ) nop params ++
@@ -304,10 +309,13 @@ and compile_expr = function
 | AEcase (aexpr, blist, t, res_adr) -> 
   let branch_exit_label = ".branch_exit_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
+
   compile_expr aexpr ++
   List.fold_left (fun code (bpattern, bexpr) ->
-    compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern ++ code
+    compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern ++
+    code
   ) (movq (imm 0) (ind ~ofs:res_adr rbp)) blist ++
+  
   label branch_exit_label
 
 and compile_binop (e1, binop, e2, t, res_adr) =
@@ -501,6 +509,8 @@ let compile_program (p : tdecl list) ofile dbg_mode =
       ) !genv !data_constr
   | _ -> ()
   ) p ;
+
+  if !dbg then Pretty.pp_genv Format.std_formatter !genv ;
 
   let p = alloc !genv p in
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in

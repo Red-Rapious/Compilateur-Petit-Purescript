@@ -2,6 +2,8 @@ open Ast
 open Format
 open Parser
 
+module Smap = Map.Make(String)
+
 let reset_code = "\o033[0m"
 let blue_code = "\o033[34m"
 let red_code = "\o033[91m"
@@ -195,7 +197,6 @@ let rec pp_aexpr fmt depth = function
   Format.fprintf fmt "-- List of bindings:@." ;
   List.iter (fun (pattern, expr) -> 
       indent fmt (depth + 1) ;
-      (*Format.fprintf fmt "%sCannot print pattern%s; though, the expression is:@." red_code reset_code ;*)
       Format.fprintf fmt "Pattern:@." ;
       pp_pattern fmt (depth+2) pattern;
       indent fmt (depth + 1) ;
@@ -211,7 +212,9 @@ match p with
 | AParg patarg -> 
   Format.fprintf fmt "%sAParg%s with patarg " blue_code reset_code ;
   pp_patarg fmt depth patarg
-| _ -> Format.fprintf fmt "%sCannot print this at the moment%s@." red_code reset_code
+| APconsarg (id, patarg_list) -> 
+  Format.fprintf fmt "%sAPconsarg%s with patarg list:@." blue_code reset_code ;
+  List.iter (indent fmt (depth + 1) ; pp_patarg fmt (depth + 1)) patarg_list
   
 and pp_patarg fmt depth = function
 | APconst (c, i) -> 
@@ -231,11 +234,11 @@ match a with
   Format.fprintf fmt " with const offset %s%d%s and result offset of %s%d%s@." yellow_code i reset_code yellow_code i' reset_code;
   pp_const fmt (depth + 1) c
 | AAuident (_, t, i) -> 
-  Format.fprintf fmt "%sAAuindent%s of type " blue_code reset_code;
+  Format.fprintf fmt "%sAAuident%s of type " blue_code reset_code;
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
 | AAlident (t, i) -> 
-  Format.fprintf fmt "%sAAindent%s of type " blue_code reset_code;
+  Format.fprintf fmt "%sAAident%s of type " blue_code reset_code;
   pp_typ fmt t ;
     Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
 | AAexpr (e, t, i) -> 
@@ -249,3 +252,10 @@ match c with
 | Cbool b -> Format.fprintf fmt "%sCbool%s %s%b%s@." blue_code reset_code green_code b reset_code
 | Cstring s -> Format.fprintf fmt "%sCstring%s %s\"%s\"%s@." blue_code reset_code green_code s reset_code
 | Cint i -> Format.fprintf fmt "%sCint%s %s%d%s@." blue_code reset_code green_code i reset_code
+
+let pp_genv fmt genv = 
+  Format.fprintf fmt "%sContent of data:@.%s" blue_code reset_code ;
+  Smap.iter (fun ident (uid, length) ->
+    Format.fprintf fmt "-- Data construction named %s\"%s\"%s with unique id %s%d%s and length %s%d%s.@." green_code ident reset_code yellow_code uid reset_code yellow_code length reset_code
+  ) genv ;
+  Format.fprintf fmt "@."
