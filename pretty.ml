@@ -224,6 +224,7 @@ and pp_patarg fmt depth = function
   Format.fprintf fmt "%sAPlident%s %s\"%s\"%s and offset %s%d%s:@." blue_code reset_code green_code id reset_code yellow_code i reset_code
 | APuident (uid, i) ->
   Format.fprintf fmt "%sAPuident%s %s%d%s and offset %s%d%s:@." blue_code reset_code yellow_code uid reset_code yellow_code i reset_code
+| _ -> Format.fprintf fmt "%sCannot print APpattern yet%s@." red_code reset_code
 
 and pp_aatom fmt depth a = 
 indent fmt depth ;

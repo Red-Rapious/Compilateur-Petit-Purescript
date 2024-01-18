@@ -151,7 +151,7 @@ and tfdecl = {
 
 type tinstance = 
 | TIntype of ntype
-| TIarrow of ntype * ntype
+| TIarrow of ntype list * ntype
 
 type tdefn = ident * patarg list * texpr
 

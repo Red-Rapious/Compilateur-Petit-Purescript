@@ -1002,7 +1002,7 @@ and typ_declaration global_env (type_env : type_env ref)
   | Dinstance (inst, dlist) ->
       verify_def !global_env_instances !type_env instance_env;
       typ_instance global_env !type_env instance_env (inst, dlist);
-      TDinstance(inst, List.map (
+      TDinstance(convert_inst inst, List.map (
         fun defn -> match frst (smaps_find (fast defn) !function_env) with
         | TArrow (tlist, t) ->
             (typ_defn global_env !type_env !global_env_instances true defn tlist t);
@@ -1010,3 +1010,7 @@ and typ_declaration global_env (type_env : type_env ref)
         | _ -> failwith "dans typ_declaration, le type récupéré n'est pas TArrow"
         ) dlist
       )
+
+and convert_inst = function 
+| Intype t -> TIntype t
+| Iarrow (x, y) -> TIarrow (x, y)
