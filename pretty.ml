@@ -134,10 +134,10 @@ let rec pp_aexpr fmt depth = function
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
-  Format.fprintf fmt "First expression:@." ;
+  Format.fprintf fmt "-- First expression:@." ;
   pp_aexpr fmt (depth + 1) e1 ;
   indent fmt depth ;
-  Format.fprintf fmt "Second expression:@." ;
+  Format.fprintf fmt "-- Second expression:@." ;
   pp_aexpr fmt (depth + 1) e2
 | AEfunc (id, alist, t, i) ->
   indent fmt depth ;
@@ -145,7 +145,7 @@ let rec pp_aexpr fmt depth = function
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
-  Format.fprintf fmt "List of contained atoms:@." ;
+  Format.fprintf fmt "-- List of contained atoms:@." ;
   List.iter (pp_aatom fmt (depth + 1)) alist
 | AEif (e1, e2, e3, t, i) ->
   indent fmt depth ;
@@ -167,7 +167,7 @@ let rec pp_aexpr fmt depth = function
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
-  Format.fprintf fmt "List of contained expressions:@." ;
+  Format.fprintf fmt "-- List of contained expressions:@." ;
   List.iter (pp_aexpr fmt (depth + 1)) elist
 | AElet (bind_list, expr, t, i) ->
   indent fmt depth ;
@@ -175,7 +175,7 @@ let rec pp_aexpr fmt depth = function
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
-  Format.fprintf fmt "List of bindings:@." ;
+  Format.fprintf fmt "-- List of bindings:@." ;
   List.iter (fun (uid, expr) -> 
       indent fmt (depth + 1) ;
       Format.fprintf fmt "Binding of uid %s%d%s with expression:@." green_code uid reset_code ;
@@ -192,14 +192,35 @@ let rec pp_aexpr fmt depth = function
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   indent fmt depth ;
-  Format.fprintf fmt "List of bindings:@." ;
+  Format.fprintf fmt "-- List of bindings:@." ;
   List.iter (fun (pattern, expr) -> 
       indent fmt (depth + 1) ;
-      Format.fprintf fmt "%sCannot print pattern%s; though, the expression is:@." red_code reset_code ;
-      pp_aexpr fmt (depth + 1) expr
+      (*Format.fprintf fmt "%sCannot print pattern%s; though, the expression is:@." red_code reset_code ;*)
+      Format.fprintf fmt "Pattern:@." ;
+      pp_pattern fmt (depth+2) pattern;
+      indent fmt (depth + 1) ;
+      Format.fprintf fmt "Expression:@." ;
+      pp_aexpr fmt (depth + 2) expr
     ) branch_list ;
-  Format.fprintf fmt "And associated expression:@." ;
+  Format.fprintf fmt "-- And associated expression:@." ;
   pp_aexpr fmt (depth + 1) expr
+
+and pp_pattern fmt depth p =
+indent fmt depth ;
+match p with 
+| AParg patarg -> 
+  Format.fprintf fmt "%sAParg%s with patarg " blue_code reset_code ;
+  pp_patarg fmt depth patarg
+| _ -> Format.fprintf fmt "%sCannot print this at the moment%s@." red_code reset_code
+  
+and pp_patarg fmt depth = function
+| APconst (c, i) -> 
+  Format.fprintf fmt "%sAPconst%s and offset %s%d%s:@." blue_code reset_code yellow_code i reset_code ;
+  pp_const fmt (depth + 1) c
+| APlident (id, i) ->
+  Format.fprintf fmt "%sAPlident%s %s\"%s\"%s and offset %s%d%s:@." blue_code reset_code green_code id reset_code yellow_code i reset_code
+| APuident (uid, i) ->
+  Format.fprintf fmt "%sAPuident%s %s%d%s and offset %s%d%s:@." blue_code reset_code yellow_code uid reset_code yellow_code i reset_code
 
 and pp_aatom fmt depth a = 
 indent fmt depth ;
@@ -225,6 +246,6 @@ match a with
 and pp_const fmt depth c = 
 indent fmt depth ;
 match c with 
-| Cbool b -> Format.fprintf fmt "Cbool %s%b%s@." green_code b reset_code
-| Cstring s -> Format.fprintf fmt "Cstring %s\"%s\"%s@." green_code s reset_code
-| Cint i -> Format.fprintf fmt "Cint %s%d%s@." green_code i reset_code
+| Cbool b -> Format.fprintf fmt "%sCbool%s %s%b%s@." blue_code reset_code green_code b reset_code
+| Cstring s -> Format.fprintf fmt "%sCstring%s %s\"%s\"%s@." blue_code reset_code green_code s reset_code
+| Cint i -> Format.fprintf fmt "%sCint%s %s%d%s@." blue_code reset_code green_code i reset_code
