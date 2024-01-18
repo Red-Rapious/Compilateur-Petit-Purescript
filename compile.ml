@@ -163,12 +163,25 @@ and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) =
   (apattern, alloc_expr genv union_env fpcur texpr)
 
 and alloc_pattern genv fpcur = function 
+(* TODO : se débarasser des localisations *)
 | Parg (_, tpatarg) -> 
-  (* TODO : se débarasser de la localisation *)
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
-| _ -> failwith "alloc_pattern: todo"
+| Pconsarg (ident, tpatarg_list) -> 
+  let uid = fst (Smap.find ident genv) in
+  let env = ref Smap.empty in 
+  let apatarg_list = List.map (fun (_, tpatarg) ->
+    let apatarg, env' = alloc_patarg genv fpcur tpatarg in 
+    env := Smap.union (fun id address1 _ -> 
+      if id = "_" then Some address1 
+      else failwith "cette union est sensé réussir"
+    ) !env env' ;
+    apatarg
+  ) tpatarg_list in
+  APconsarg (uid, apatarg_list), !env
+
 and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: todo"
+
 and alloc_fdecl fdecl = ADfdecl {
   aname = fdecl.tname ;
   avariables = fdecl.tvariables;
@@ -198,6 +211,7 @@ let comparaison_count = ref 0
 let lazy_count = ref 0
 let if_count = ref 0
 let branch_count = ref 0
+let matching_count = ref 0
 let hardcoded_strings = ref []
 
 let include_print_bool = ref false
@@ -464,7 +478,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
 | AParg (patarg) -> begin 
     match patarg with
     | APconst (c, adr) -> 
-      let branch_true_label = ".branch_true_" ^ (string_of_int !branch_count) in 
+      let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
       incr branch_count ;
 
       compile_const c (failwith "adress") ++
@@ -473,29 +487,72 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
       cmpq (reg r8) (reg r9) ++
       
       (* si le pattern ne match pas, on va au prochain cas *)
-      jne branch_true_label ++
+      jne branch_continue_label ++
       (* sinon, on exécute l'expression de la branche *)
       compile_expr expr_true ++
       move_stack (address_of_aexpr expr_true) res_adr ++
       jmp end_label ++ (* et on finit *)
-      label branch_true_label
+      label branch_continue_label
     | APlident (id, adr) -> 
         move_stack condition_adr adr ++
         compile_expr expr_true ++
         move_stack (address_of_aexpr expr_true) res_adr ++
         jmp end_label
     | APuident (uid, adr) ->
-        let branch_true_label = ".branch_true_" ^ (string_of_int !branch_count) in 
+        let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
         incr branch_count ;
         movq (ind ~ofs:condition_adr rbp) (reg r8) ++
         cmpq (imm uid) (ind r8) ++
-        jne branch_true_label ++
+        jne branch_continue_label ++
         compile_expr expr_true ++
         move_stack (address_of_aexpr expr_true) res_adr ++
         jmp end_label ++
-        label branch_true_label
+        label branch_continue_label
+    | APpattern (pattern, address) -> 
+        compile_pattern condition_adr res_adr expr_true end_label pattern
     end
-| APconsarg (id, plist) -> failwith "compile_pattern: todo APconsarg"
+| APconsarg (uid, plist) ->
+  let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
+  incr branch_count ;
+  let i = ref 0 in
+
+  movq (ind ~ofs:condition_adr rbp) (reg r8) ++
+  cmpq (imm uid) (ind r8) ++
+  jne branch_continue_label ++
+  List.fold_left (fun code patarg -> incr i ; code ++ compile_patarg_in_cons condition_adr res_adr branch_continue_label !i patarg) nop plist ++
+
+  compile_expr expr_true ++
+  move_stack (address_of_aexpr expr_true) res_adr ++
+  jmp end_label ++
+  
+  label branch_continue_label
+
+and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = function 
+| APlident (_, address) -> 
+  movq (ind ~ofs:condition_adr rbp) (reg r9) ++ (* r8 déjà utilisé *)
+  movq (ind ~ofs:(8*i) r9) (reg rdx) ++
+  movq (reg rdx) (ind ~ofs:address rbp)
+| APuident (uid, address) ->
+  movq (ind ~ofs:condition_adr rbp) (reg r9) ++
+  movq (ind ~ofs:(8*i) r9) (reg r8) ++
+  cmpq (imm uid) (ind r8) ++
+  jne branch_continue_label
+| APconst (c, address) -> 
+  compile_const c address ++ (* TODO: change address *)
+  movq (ind ~ofs:condition_adr rbp) (reg r9) ++
+  movq (ind ~ofs:address rbp) (reg r8) ++ (* TODO: change address *)
+  cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
+  jne branch_continue_label
+| APpattern (pattern, address) ->
+  let matching_label = ".matching" ^ (string_of_int !matching_count) in 
+  incr matching_count ;
+  movq (ind ~ofs:condition_adr rbp) (reg r9) ++
+  movq (ind ~ofs:(8*i) r9) (reg rdx) ++
+  movq (reg rdx) (ind ~ofs:address rbp) ++
+  (* TODO: find a way to not compile anything with the expr *)
+  compile_pattern address res_adr (failwith "compile nothing") matching_label pattern ++
+  jmp branch_continue_label ++
+  label matching_label
 
 let data_count = ref 0
 let compile_program (p : tdecl list) ofile dbg_mode =

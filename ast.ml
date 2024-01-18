@@ -201,9 +201,10 @@ and apatarg =
 | APconst of constant * int
 | APlident of ident * int
 | APuident of int * int
+| APpattern of apattern * int
 and apattern = 
 | AParg of apatarg
-| APconsarg of ident * (apatarg list)
+| APconsarg of int * (apatarg list)
 
 type adefn = ident * apatarg list * aexpr * frame_size
 
