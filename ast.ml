@@ -178,6 +178,8 @@ type aexpr =
 | AElet of abinding list * aexpr * ttyp * int
 | AEcase of aexpr * (abranch list) * ttyp * int
 and aatom =
+  (* le permier int est pour l'adresse de la constante
+     un peu bancal mais ça marche je crois *)
 | AAconst of constant * int * ttyp * int
 | AAlident of ttyp * int(* adresse, type *)
 | AAuident of int * ttyp * int
@@ -208,7 +210,7 @@ type adefn = ident * apatarg list * aexpr * frame_size
 type adecl = 
 | ADefn of adefn
 (* 
-  les lignes ci-dessous sont peut-être à ajuster pour des versions
+  TODO: les lignes ci-dessous sont peut-être à ajuster pour des versions
   custom de data, class, instance
 *)
 | ADfdecl of afdecl

@@ -50,7 +50,7 @@ and alloc_defn genv (ident, plist, expr) : adecl =
 and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
   let aatom = alloc_atom genv env fpcur a
-  in AEatom(aatom, t, fpcur ())
+  in AEatom(aatom, t, address_of_aatom aatom)
 | TEbinop (e1, op, e2, t) -> 
   let e1' = alloc_expr genv env fpcur e1 in 
   let e2' = alloc_expr genv env fpcur e2 in
@@ -68,6 +68,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   let e1' = alloc_expr genv env fpcur e1 in 
   let e2' = alloc_expr genv env fpcur e2 in 
   let e3' = alloc_expr genv env fpcur e3 in 
+  (* TODO: least counter *)
   AEif (e1', e2', e3', t, fpcur ())
 | TEfunc (name, targs, t) ->
   let aargs = List.map (alloc_atom genv env fpcur) targs in 
@@ -111,11 +112,13 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
 | TAident (ident, t) -> 
   (* TODO : séparer TAuident et TAlident *)
   let first_letter = String.get ident 0 in
+
+  (* TAlident *)
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
   | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
-  | _ -> 
-    begin
+  | _ -> let adr = Smap.find ident env in AAlident (t, adr))
+    (*begin
       match Smap.find_opt ident env with
       | Some c -> AAlident (t, c)
       | None -> begin
@@ -125,7 +128,10 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
           AAlident (t, address)
         | None -> raise (UndefIdent ident)
       end
-    end)
+    end*)
+    
+
+  (* TAuident *)
   else begin
     let address = fpcur () in 
     let data_constr = Smap.find ident genv in 
@@ -482,8 +488,8 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         let branch_true_label = ".branch_true_" ^ (string_of_int !branch_count) in 
         incr branch_count ;
         movq (ind ~ofs:condition_adr rbp) (reg r8) ++
-        cmpq (imm uid) (ind r8)++
-        jne end_label ++
+        cmpq (imm uid) (ind r8) ++
+        jne branch_true_label ++
         compile_expr expr_true ++
         move_stack (address_of_aexpr expr_true) res_adr ++
         jmp end_label ++
