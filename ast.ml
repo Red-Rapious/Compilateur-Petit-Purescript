@@ -37,6 +37,7 @@ and typ =
 
 type instance =
 | Intype of ntype
+(* on ne distingue pas le cas où la liste contient un seul élément *)
 | Iarrow of (ntype list) * ntype
 
 type patarg = 
@@ -148,6 +149,9 @@ and tfdecl = {
 | TParg of patarg
 | TPconsarg of ident * (patarg list)*)
 
+type tinstance = 
+| TIntype of ntype
+| TIarrow of ntype * ntype
 
 type tdefn = ident * patarg list * texpr
 
@@ -160,7 +164,7 @@ type tdecl =
 | TDfdecl of tfdecl
 | TDdata of data
 | TDclass of clas
-| TDinstance of instance * (tdefn list)
+| TDinstance of tinstance * (tdefn list)
 
 type tfile = { tmodule_name: string ; tmain : tdecl list }
 
