@@ -39,7 +39,7 @@ match decl with
 | TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
 
 and alloc_defn genv (ident, plist, expr) : adecl = 
-  if !dbg then Pretty.pp_texpr std_formatter 0 expr ;
+  if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
   let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
 
@@ -227,19 +227,24 @@ let alloc genv tdecl_list : adecl list =
       | _ -> 
         let name = tdefn_name (List.hd !tdefn_buffer) in
         let branch_list = List.map (fun d ->
-          (Pconsarg (name, List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d)), 
-          tdefn_expr d)
-        ) !tdefn_buffer in
+          (
+            begin if List.length (tdefn_plist d) = 1 then 
+              Parg (Typing.placeholder_loc, List.hd (tdefn_plist d))
+            else Pconsarg (failwith "idk ce qu'il faut mettre ici", List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d))
+            end, 
+            tdefn_expr d (* todo: le type est faux *)
+          )
+        ) (List.rev !tdefn_buffer) in
         let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
         let expr = TEcase (
-          TEatom(TAident(".matching", t), t),
+          TEatom(TAident(".match_variable", t), t),
           branch_list,
           TStr
         ) in
         (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
         adecl_list := 
         (alloc_decl genv (TDefn (
-          name, [], expr
+          name, [Pident ".match_variable"], expr
         ))) :: !adecl_list 
     end ;
     tdefn_buffer := []

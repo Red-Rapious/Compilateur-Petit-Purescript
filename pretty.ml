@@ -125,8 +125,14 @@ let pp_const fmt depth c =
   | Cint i -> Format.fprintf fmt "%sCint%s %s%d%s@." blue_code reset_code green_code i reset_code
   
 
+let rec pp_tdefn fmt (ident, plist, expr) = 
+  Format.fprintf fmt "%sTDefn%s named %s\"%s\"%s:@.Patarg list:@." blue_code reset_code green_code ident reset_code ;
+  indent fmt 1 ;
+  List.iter (pp_patarg fmt 1) plist ;
+  Format.fprintf fmt "Associated expression:@." ;
+  pp_texpr fmt 1 expr
 
-let rec pp_texpr fmt depth = function
+and pp_texpr fmt depth = function
 | TEatom (a, t) -> 
   indent fmt depth ;
   Format.fprintf fmt "%sTEatom%s of type " blue_code reset_code ;
@@ -254,10 +260,10 @@ and pp_pattern fmt depth p =
   indent fmt depth ;
   match p with 
   | Parg patarg -> 
-    Format.fprintf fmt "%sAParg%s with patarg " blue_code reset_code ;
+    Format.fprintf fmt "%sParg%s with patarg " blue_code reset_code ;
     pp_patarg fmt depth (snd patarg)
   | Pconsarg (id, patarg_list) -> 
-    Format.fprintf fmt "%sAPconsarg%s with patarg list:@." blue_code reset_code ;
+    Format.fprintf fmt "%sPconsarg%s with patarg list:@." blue_code reset_code ;
     List.iter (indent fmt (depth + 1) ; pp_patarg fmt (depth + 1)) (List.map snd patarg_list)
     
 
