@@ -30,9 +30,9 @@ let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
 | TDefn d -> alloc_defn genv d
 | TDfdecl d -> alloc_fdecl d
-| TDdata d -> alloc_data d
-| TDclass c -> alloc_class c
-| TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
+| TDdata d -> ADdata d
+| TDclass c -> ADclass c
+| TDinstance (instance, dlist) -> ADinstance (instance, []) (* todo: change? *)
 
 and alloc_defn genv (ident, plist, expr) : adecl = 
   if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
@@ -190,10 +190,8 @@ and alloc_fdecl fdecl = ADfdecl {
   atypes = fdecl.ttypes;
   aout_type = fdecl.tout_type
 }
-and alloc_data data = ADdata data
-and alloc_class c = failwith "alloc_class: todo"
 
-let alloc genv = List.map (alloc_decl genv)
+(*let alloc genv = List.map (alloc_decl genv)*)
 
 let tdefn_name (n, _, _) = n
 let tdefn_plist (_, p, _) = p
@@ -211,15 +209,18 @@ let alloc genv tdecl_list : adecl list =
         let name = tdefn_name (List.hd !tdefn_buffer) in
         let i = ref (-1) in
         let branch_list = List.map (fun d ->
+          let plist = tdefn_plist d in
           incr i ;
           (* TODO: nettoyage de cette mocheté *)
-          (
+          (*(
             begin if List.length (tdefn_plist d) = 1 then 
               Parg (Typing.placeholder_loc, List.hd (tdefn_plist d))
             else Pconsarg (".consarg_" ^ string_of_int !i, List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d))
             end, 
             tdefn_expr d (* todo: le type est faux *)
-          )
+          )*)
+          (* on prend le dernier argument *)
+          Parg (Typing.placeholder_loc, List.nth plist ((List.length plist) - 1)), tdefn_expr d
         ) (List.rev !tdefn_buffer) in
         let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
         let expr = TEcase (
@@ -227,10 +228,16 @@ let alloc genv tdecl_list : adecl list =
           branch_list,
           TStr
         ) in
+        let plist = tdefn_plist (List.hd !tdefn_buffer) in
+        let patarg_list = (List.mapi (fun i patarg ->
+          if i = (List.length plist) - 1 then (Pident ".match_variable")
+          else patarg
+        ) plist)
+        in
         (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
         adecl_list := 
         (alloc_decl genv (TDefn (
-          name, [Pident ".match_variable"], expr
+          name, patarg_list, expr
         ))) :: !adecl_list 
     end ;
     tdefn_buffer := []
@@ -270,11 +277,13 @@ let include_print_int = ref false
 let include_div = ref false
 let include_concat = ref false
 
+(* todo: retirer les constructions inutiles *)
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
-| ADfdecl d -> nop
-| ADdata data -> nop
-| _ -> failwith "compile_decl: todo"
+| ADfdecl _ -> nop
+| ADdata _ -> nop
+| ADinstance _ -> nop
+| ADclass _ -> nop
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 
   if !dbg then Pretty.pp_aexpr std_formatter 0 aexpr ;

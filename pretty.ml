@@ -127,8 +127,7 @@ let pp_const fmt depth c =
 
 let rec pp_tdefn fmt (ident, plist, expr) = 
   Format.fprintf fmt "%sTDefn%s named %s\"%s\"%s:@.Patarg list:@." blue_code reset_code green_code ident reset_code ;
-  indent fmt 1 ;
-  List.iter (pp_patarg fmt 1) plist ;
+  List.iter (fun p -> indent fmt 1 ; pp_patarg fmt 1 p) plist ;
   Format.fprintf fmt "Associated expression:@." ;
   pp_texpr fmt 1 expr
 
@@ -235,7 +234,7 @@ and pp_patarg fmt depth = function
   Format.fprintf fmt "%sPconst%s:@." blue_code reset_code ;
   pp_const fmt (depth + 1) c
 | Pident id ->
-  Format.fprintf fmt "%sAPlident%s %s\"%s\"%s:@." blue_code reset_code green_code id reset_code
+  Format.fprintf fmt "%sPlident%s %s\"%s\"%s:@." blue_code reset_code green_code id reset_code
 | _ -> Format.fprintf fmt "%sCannot print Ppattern yet%s@." red_code reset_code
 
 and pp_tatom fmt depth a = 
