@@ -567,7 +567,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
 
       compile_const c c_adr ++
       movq (ind ~ofs:condition_adr rbp) (reg r8) ++
-      movq (ind ~ofs:(failwith "find address of const") rbp) (reg r9) ++
+      movq (ind ~ofs:c_adr rbp) (reg r9) ++
       cmpq (reg r8) (reg r9) ++
       
       (* si le pattern ne match pas, on va au prochain cas *)

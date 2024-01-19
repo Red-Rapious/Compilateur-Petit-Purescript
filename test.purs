@@ -4,13 +4,10 @@ import Prelude
 import Effect
 import Effect.Console
 
-data T = A | B
-
-foo:: T -> String
-foo A = "hello"
-foo B = "world"
+fact:: Int -> Int
+fact 0 = 1
+fact n = n * fact (n-1)
 
 main :: Effect Unit
-main = do log (foo A)
-          log (foo B)
+main = log (show (fact 10))
 
