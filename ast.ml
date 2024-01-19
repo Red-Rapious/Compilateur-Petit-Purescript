@@ -203,7 +203,7 @@ and afdecl = {
 }
 
 and apatarg = 
-| APconst of constant * int
+| APconst of constant * int * int
 | APlident of ident * int
 | APuident of int * int
 | APpattern of apattern * int

@@ -20,6 +20,10 @@ let create_pos_fpcur () =
   let fpcur = ref 8 in 
   (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
+(*let init_fpcur init =
+  let fpcur = ref init in 
+  (fun () -> fpcur := !fpcur -8 ; !fpcur)*)
+
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
@@ -148,7 +152,7 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   end
 
 and alloc_patarg genv fpcur = function
-| Pconst c -> APconst (c, fpcur ()), Smap.empty
+| Pconst c -> let address = fpcur () in APconst (c, address, address), Smap.empty
 | Pident ident -> 
   let first_letter = String.get ident 0 in
   (* lident *)
@@ -349,13 +353,16 @@ and compile_expr = function
 
 | AEuident (data_constr, params, types, res_adr) -> 
   let i = ref 0 in
-  movq (imm (8*(snd data_constr + 1))) (reg rsi) ++
+  comment "compilation de AEuident" ++
+  (* on alloue de la place (cf. sujet) *)
+  movq (imm (8*(snd data_constr + 1))) (reg rdi) ++
   call "malloc" ++
   movq (reg rax) (ind ~ofs:res_adr rbp) ++
   movq (imm (fst data_constr)) (ind rax) ++
   List.fold_left (fun code aatom ->
     incr i ;
     code ++
+    comment (string_of_int !i) ++
     compile_atom aatom ++
     movq (ind ~ofs:res_adr rbp) (reg r9) ++
     movq (ind ~ofs:(address_of_aatom aatom) rbp) (reg rdx) ++
@@ -501,11 +508,11 @@ and compile_const c adr =
 and compile_pattern condition_adr res_adr expr_true end_label = function 
 | AParg (patarg) -> begin 
     match patarg with
-    | APconst (c, adr) -> 
+    | APconst (c, c_adr, adr) -> 
       let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
       incr branch_count ;
 
-      compile_const c (failwith "adress") ++
+      compile_const c c_adr ++
       movq (ind ~ofs:condition_adr rbp) (reg r8) ++
       movq (ind ~ofs:(failwith "find address of const") rbp) (reg r9) ++
       cmpq (reg r8) (reg r9) ++
@@ -566,10 +573,10 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   movq (ind ~ofs:(8*i) r9) (reg r8) ++
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
-| APconst (c, address) -> 
-  compile_const c 420 ++ (* TODO: change address *)
+| APconst (c, c_adr, address) -> 
+  compile_const c c_adr ++ (* TODO: change address *)
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:420 rbp) (reg r8) ++ (* TODO: change address *)
+  movq (ind ~ofs:c_adr rbp) (reg r8) ++ (* TODO: change address *)
   cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->
