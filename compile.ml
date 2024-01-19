@@ -20,6 +20,11 @@ let create_pos_fpcur () =
   let fpcur = ref 8 in 
   (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
+let find_in_env name env = 
+match Smap.find_opt name env with
+| Some x -> x
+| None -> raise (UndefIdent name)
+
 (*let init_fpcur init =
   let fpcur = ref init in 
   (fun () -> fpcur := !fpcur -8 ; !fpcur)*)
@@ -83,7 +88,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   (* TEuident *)
   end else begin
     let aargs = List.map (alloc_atom genv env fpcur) targs in 
-    AEuident (Smap.find name genv, aargs, t, fpcur ()) 
+    AEuident (find_in_env name genv, aargs, t, fpcur ()) 
   end
 | TEdo (expr_list, t) -> 
   let aexpr_list = List.map (alloc_expr genv env fpcur) expr_list in
@@ -101,7 +106,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   let abinding = List.fold_left (fun l (bident, bexpr) ->
     begin 
       let expr = alloc_expr genv env fpcur bexpr in
-      let res_adr = Smap.find bident env in
+      let res_adr = find_in_env bident env in
       (res_adr, expr)
     end :: l
   ) [] binding_list 
@@ -129,7 +134,7 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
   | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
-  | _ -> let adr = Smap.find ident env in AAlident (t, adr))
+  | _ -> let adr = find_in_env ident env in AAlident (t, adr))
     (*begin
       match Smap.find_opt ident env with
       | Some c -> AAlident (t, c)
@@ -146,7 +151,7 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   (* TAuident *)
   else begin
     let address = fpcur () in 
-    let data_constr = Smap.find ident genv in 
+    let data_constr = find_in_env ident genv in 
     if snd data_constr <> 0 then failwith "wesh ya des paramètres" else
     AAuident (fst data_constr, t, address)
   end
@@ -163,7 +168,7 @@ and alloc_patarg genv fpcur = function
 
   (* uident *)
   end else 
-    APuident (fst (Smap.find ident genv), fpcur ()), Smap.empty
+    APuident (fst (find_in_env ident genv), fpcur ()), Smap.empty
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
@@ -180,7 +185,7 @@ and alloc_pattern genv fpcur = function
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
 | Pconsarg (ident, tpatarg_list) -> 
-  let uid = fst (Smap.find ident genv) in
+  let uid = fst (find_in_env ident genv) in
   let env = ref Smap.empty in 
   let apatarg_list = List.map (fun (_, tpatarg) ->
     let apatarg, env' = alloc_patarg genv fpcur tpatarg in 
@@ -205,6 +210,48 @@ and alloc_data data = ADdata data
 and alloc_class c = failwith "alloc_class: todo"
 
 let alloc genv = List.map (alloc_decl genv)
+
+let tdefn_name (n, _, _) = n
+let tdefn_plist (_, p, _) = p
+let tdefn_expr (_, _, e) = e
+
+let alloc genv tdecl_list : adecl list = 
+  let tdefn_buffer = ref [] in
+  let adecl_list : adecl list ref = ref [] in
+
+  let process_tdefn_buffer () = 
+    begin match List.length !tdefn_buffer with
+      | 0 -> ()
+      | 1 -> adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
+      | _ -> 
+        let name = tdefn_name (List.hd !tdefn_buffer) in
+        let branch_list = List.map (fun d ->
+          (Pconsarg (name, List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d)), 
+          tdefn_expr d)
+        ) !tdefn_buffer in
+        let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
+        let expr = TEcase (
+          TEatom(TAident(".matching", t), t),
+          branch_list,
+          TStr
+        ) in
+        (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
+        adecl_list := 
+        (alloc_decl genv (TDefn (
+          name, [], expr
+        ))) :: !adecl_list 
+    end ;
+    tdefn_buffer := []
+  in
+
+  List.iter (fun tdecl -> 
+    match tdecl with
+    | TDefn tdefn -> tdefn_buffer := tdefn :: !tdefn_buffer
+    | _ -> process_tdefn_buffer (); adecl_list := alloc_decl genv tdecl :: !adecl_list 
+  ) tdecl_list ;
+  process_tdefn_buffer () ;
+
+  List.rev !adecl_list
 
 
 (* PRODUCTION DU CODE *)

@@ -220,12 +220,12 @@ indent fmt depth ;
 match p with 
 | AParg patarg -> 
   Format.fprintf fmt "%sAParg%s with patarg " blue_code reset_code ;
-  pp_patarg fmt depth patarg
+  pp_apatarg fmt depth patarg
 | APconsarg (id, patarg_list) -> 
   Format.fprintf fmt "%sAPconsarg%s with patarg list:@." blue_code reset_code ;
-  List.iter (indent fmt (depth + 1) ; pp_patarg fmt (depth + 1)) patarg_list
+  List.iter (indent fmt (depth + 1) ; pp_apatarg fmt (depth + 1)) patarg_list
   
-and pp_patarg fmt depth = function
+and pp_apatarg fmt depth = function
 | APconst (c, c_adr, i) -> 
   Format.fprintf fmt "%sAPconst%s with const offset %s%d%s and offset %s%d%s:@." blue_code reset_code yellow_code c_adr reset_code yellow_code i reset_code ;
   pp_const fmt (depth + 1) c
