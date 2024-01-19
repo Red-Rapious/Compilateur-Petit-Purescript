@@ -77,12 +77,12 @@ let print_token t = match t with
 | CMP binop -> print_binop binop
 
 let rec pp_typ fmt = function
-| TArrow ([], t) -> Format.fprintf fmt "%a" pp_atom t
+| TArrow ([], t) -> Format.fprintf fmt "%a" pp_ttyp t
 | TArrow (h :: t, t2) ->
-    Format.fprintf fmt "%a ->@ %a" pp_atom h pp_typ (TArrow (t, t2))
-| (TInt | TVar _ | TUnit | TStr | TBool (*| TEffect _*) | TCons _ | TAlias _) as t -> pp_atom fmt t
+    Format.fprintf fmt "%a ->@ %a" pp_ttyp h pp_typ (TArrow (t, t2))
+| (TInt | TVar _ | TUnit | TStr | TBool (*| TEffect _*) | TCons _ | TAlias _) as t -> pp_ttyp fmt t
 
-and pp_atom fmt a = 
+and pp_ttyp fmt a = 
 Format.fprintf fmt "%s" magenta_code ;
 begin 
 match a with
@@ -99,7 +99,7 @@ match a with
 | TCons (tag, tlist) -> 
   Format.fprintf fmt "Cons (%s, [" tag ;
   List.iter (fun t -> 
-    pp_atom fmt t ;
+    pp_ttyp fmt t ;
     Format.fprintf fmt "%s,%s " magenta_code reset_code (* oui, même pour le dernier *)
   ) tlist ;
   Format.fprintf fmt "%s])%s" magenta_code reset_code
@@ -116,6 +116,150 @@ let indent fmt depth =
   for _ = 1 to depth do 
     Format.fprintf fmt "\t"
   done
+
+let pp_const fmt depth c = 
+  indent fmt depth ;
+  match c with 
+  | Cbool b -> Format.fprintf fmt "%sCbool%s %s%b%s@." blue_code reset_code green_code b reset_code
+  | Cstring s -> Format.fprintf fmt "%sCstring%s %s\"%s\"%s@." blue_code reset_code green_code s reset_code
+  | Cint i -> Format.fprintf fmt "%sCint%s %s%d%s@." blue_code reset_code green_code i reset_code
+  
+
+
+let rec pp_texpr fmt depth = function
+| TEatom (a, t) -> 
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEatom%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  pp_tatom fmt (depth + 1) a
+| TEunop (_, e, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEunop%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  pp_texpr fmt (depth + 1) e
+| TEbinop (e1, b, e2, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEbinop \'%s\'%s of type " blue_code (print_binop b) reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- First expression:@." ;
+  pp_texpr fmt (depth + 1) e1 ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- Second expression:@." ;
+  pp_texpr fmt (depth + 1) e2
+| TEfunc (id, alist, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEfunc%s named %s\"%s\"%s of type " blue_code reset_code green_code id reset_code;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of contained atoms:@." ;
+  List.iter (pp_tatom fmt (depth + 1)) alist
+| TEif (e1, e2, e3, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEif%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  indent fmt depth ;
+  Format.fprintf fmt "Condition:@." ;
+  pp_texpr fmt (depth + 1) e1 ;
+  indent fmt depth ;
+  Format.fprintf fmt "then:@." ;
+  pp_texpr fmt (depth + 1) e2 ;
+  indent fmt depth ;
+  Format.fprintf fmt "else:@." ;
+  pp_texpr fmt (depth + 1) e3
+| TEdo (elist, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEdo%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of contained expressions:@." ;
+  List.iter (pp_texpr fmt (depth + 1)) elist
+| TElet (bind_list, expr, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sAElet%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of bindings:@." ;
+  List.iter (fun (name, expr) -> 
+      indent fmt (depth + 1) ;
+      Format.fprintf fmt "Binding of name %s%s%s with expression:@." green_code name reset_code ;
+      pp_texpr fmt (depth + 1) expr
+    ) bind_list ;
+
+  indent fmt depth ;
+  Format.fprintf fmt "And associated expression:@." ;
+  pp_texpr fmt (depth + 1) expr
+
+| TEcase (expr, branch_list, t) ->
+  indent fmt depth ;
+  Format.fprintf fmt "%sTEcase%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of bindings:@." ;
+  List.iteri (fun i (pattern, expr) -> 
+      indent fmt (depth + 1) ;
+      Format.fprintf fmt "Pattern %d:@." i ;
+      pp_pattern fmt (depth+2) pattern;
+      indent fmt (depth + 1) ;
+      Format.fprintf fmt "Expression %d:@." i ;
+      pp_texpr fmt (depth + 2) expr
+    ) branch_list ;
+  Format.fprintf fmt "-- And associated expression:@." ;
+  pp_texpr fmt (depth + 1) expr
+(*| TEuident (data_constr, alist, t) -> 
+  indent fmt depth ;
+  Format.fprintf fmt "%sAEuident%s with data cosntruction %s(%d, %d)%s of type " blue_code reset_code yellow_code (fst data_constr) (snd data_constr) reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of contained atoms:@." ;
+  List.iter (pp_aatom fmt (depth + 1)) alist*)
+
+
+
+and pp_patarg fmt depth = function
+| Pconst c -> 
+  Format.fprintf fmt "%sPconst%s:@." blue_code reset_code ;
+  pp_const fmt (depth + 1) c
+| Pident id ->
+  Format.fprintf fmt "%sAPlident%s %s\"%s\"%s:@." blue_code reset_code green_code id reset_code
+| _ -> Format.fprintf fmt "%sCannot print Ppattern yet%s@." red_code reset_code
+
+and pp_tatom fmt depth a = 
+indent fmt depth ;
+match a with
+| TAconst (c, t) ->
+  Format.fprintf fmt "%sTAconst%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  pp_const fmt (depth + 1) c
+| TAident (id, t) -> 
+  Format.fprintf fmt "%sTAident%s %s\"%s\"%s of type " blue_code reset_code green_code id reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@."
+| TAexpr (e, t) -> 
+  Format.fprintf fmt "%sTAexpr%s of type " blue_code reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt "@." ;
+  pp_texpr fmt (depth + 1) e 
+
+and pp_pattern fmt depth p =
+  indent fmt depth ;
+  match p with 
+  | Parg patarg -> 
+    Format.fprintf fmt "%sAParg%s with patarg " blue_code reset_code ;
+    pp_patarg fmt depth (snd patarg)
+  | Pconsarg (id, patarg_list) -> 
+    Format.fprintf fmt "%sAPconsarg%s with patarg list:@." blue_code reset_code ;
+    List.iter (indent fmt (depth + 1) ; pp_patarg fmt (depth + 1)) (List.map snd patarg_list)
+    
 
 let rec pp_aexpr fmt depth = function
 | AEatom (a, t, i) -> 
@@ -198,7 +342,7 @@ let rec pp_aexpr fmt depth = function
   List.iteri (fun i (pattern, expr) -> 
       indent fmt (depth + 1) ;
       Format.fprintf fmt "Pattern %d:@." i ;
-      pp_pattern fmt (depth+2) pattern;
+      pp_apattern fmt (depth+2) pattern;
       indent fmt (depth + 1) ;
       Format.fprintf fmt "Expression %d:@." i ;
       pp_aexpr fmt (depth + 2) expr
@@ -215,7 +359,7 @@ let rec pp_aexpr fmt depth = function
   List.iter (pp_aatom fmt (depth + 1)) alist
 
 
-and pp_pattern fmt depth p =
+and pp_apattern fmt depth p =
 indent fmt depth ;
 match p with 
 | AParg patarg -> 
@@ -256,12 +400,6 @@ match a with
   pp_typ fmt t ;
   Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
   pp_aexpr fmt (depth + 1) e 
-and pp_const fmt depth c = 
-indent fmt depth ;
-match c with 
-| Cbool b -> Format.fprintf fmt "%sCbool%s %s%b%s@." blue_code reset_code green_code b reset_code
-| Cstring s -> Format.fprintf fmt "%sCstring%s %s\"%s\"%s@." blue_code reset_code green_code s reset_code
-| Cint i -> Format.fprintf fmt "%sCint%s %s%d%s@." blue_code reset_code green_code i reset_code
 
 let pp_genv fmt genv = 
   Format.fprintf fmt "%sContent of data:@.%s" blue_code reset_code ;

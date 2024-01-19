@@ -39,6 +39,7 @@ match decl with
 | TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
 
 and alloc_defn genv (ident, plist, expr) : adecl = 
+  if !dbg then Pretty.pp_texpr std_formatter 0 expr ;
   let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
 
@@ -656,9 +657,13 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   | _ -> ()
   ) p ;
 
-  if !dbg then Pretty.pp_genv Format.std_formatter !genv ;
-
+  if !dbg then begin 
+    Pretty.pp_genv Format.std_formatter !genv ;
+    Format.printf "== TYPED AST ==@."
+  end ;
+  
   let p = alloc !genv p in
+  if !dbg then Format.printf "== ALLOCATED AST ==@." ;
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in
   
   let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) (Hashtbl.create 17)

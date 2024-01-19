@@ -7,8 +7,8 @@ import Effect.Console
 data T = A | B
 
 foo:: T -> String
-foo A = "hello"
-foo B = "world"
+foo x = case x of A -> "hello"
+                  B -> "world"
 
 main :: Effect Unit
 main = do log (foo A)
