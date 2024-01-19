@@ -205,7 +205,14 @@ let rec pp_aexpr fmt depth = function
     ) branch_list ;
   Format.fprintf fmt "-- And associated expression:@." ;
   pp_aexpr fmt (depth + 1) expr
-| _ -> Format.fprintf fmt "%sCannot print AEuident yet%s@." red_code reset_code
+| AEuident (data_constr, alist, t, i) -> 
+  indent fmt depth ;
+  Format.fprintf fmt "%sAEuident%s with data cosntruction %s(%d, %d)%s of type " blue_code reset_code yellow_code (fst data_constr) (snd data_constr) reset_code ;
+  pp_typ fmt t ;
+  Format.fprintf fmt " with offset %s%d%s@." yellow_code i reset_code ;
+  indent fmt depth ;
+  Format.fprintf fmt "-- List of contained atoms:@." ;
+  List.iter (pp_aatom fmt (depth + 1)) alist
 
 
 and pp_pattern fmt depth p =
@@ -219,8 +226,8 @@ match p with
   List.iter (indent fmt (depth + 1) ; pp_patarg fmt (depth + 1)) patarg_list
   
 and pp_patarg fmt depth = function
-| APconst (c, i) -> 
-  Format.fprintf fmt "%sAPconst%s and offset %s%d%s:@." blue_code reset_code yellow_code i reset_code ;
+| APconst (c, c_adr, i) -> 
+  Format.fprintf fmt "%sAPconst%s with const offset %s%d%s and offset %s%d%s:@." blue_code reset_code yellow_code c_adr reset_code yellow_code i reset_code ;
   pp_const fmt (depth + 1) c
 | APlident (id, i) ->
   Format.fprintf fmt "%sAPlident%s %s\"%s\"%s and offset %s%d%s:@." blue_code reset_code green_code id reset_code yellow_code i reset_code
