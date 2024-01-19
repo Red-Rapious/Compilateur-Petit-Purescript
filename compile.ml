@@ -25,10 +25,6 @@ match Smap.find_opt name env with
 | Some x -> x
 | None -> raise (UndefIdent name)
 
-(*let init_fpcur init =
-  let fpcur = ref init in 
-  (fun () -> fpcur := !fpcur -8 ; !fpcur)*)
-
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
@@ -95,15 +91,14 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   let aexpr_list = List.map (alloc_expr genv env fpcur) expr_list in
   AEdo (aexpr_list, t, fpcur ())
 | TElet (binding_list, expr, typ) ->
-  (* TODO: faire les deux boucles en une seule *)
-  (* on ajoute à l'environnement les positions des bindings *)
+  (* on ajoute d'abord à l'environnement les addresses des bindings *)
   let env = List.fold_left (
     fun acc_env (bident, _btype) -> 
       Smap.add bident (fpcur ()) acc_env
     ) env binding_list 
   in
 
-  (* allocation des expressions dans le binding *)
+  (* ensuite, allocation des expressions dans le binding *)
   let abinding = List.fold_left (fun l (bident, bexpr) ->
     begin 
       let expr = alloc_expr genv env fpcur bexpr in
@@ -113,7 +108,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   ) [] binding_list 
   in
 
-  (* allocation de l'expression dans le in *)
+  (* enfin, allocation de l'expression dans le in *)
   let aexpr = alloc_expr genv env fpcur expr in
   AElet (abinding, aexpr, typ, fpcur ())
 
@@ -136,18 +131,6 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   (match ident with
   | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
   | _ -> let adr = find_in_env ident env in AAlident (t, adr))
-    (*begin
-      match Smap.find_opt ident env with
-      | Some c -> AAlident (t, c)
-      | None -> begin
-        match Smap.find_opt ident genv with
-        | Some c -> 
-          let address = fpcur () in 
-          AAlident (t, address)
-        | None -> raise (UndefIdent ident)
-      end
-    end*)
-    
 
   (* TAuident *)
   else begin
@@ -181,7 +164,7 @@ and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) =
   (apattern, alloc_expr genv union_env fpcur texpr)
 
 and alloc_pattern genv fpcur = function 
-(* TODO : se débarasser des localisations *)
+(* TODO : se débarasser des localisations plus tôt *)
 | Parg (_, tpatarg) -> 
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
@@ -226,11 +209,14 @@ let alloc genv tdecl_list : adecl list =
       | 1 -> adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
       | _ -> 
         let name = tdefn_name (List.hd !tdefn_buffer) in
+        let i = ref (-1) in
         let branch_list = List.map (fun d ->
+          incr i ;
+          (* TODO: nettoyage de cette mocheté *)
           (
             begin if List.length (tdefn_plist d) = 1 then 
               Parg (Typing.placeholder_loc, List.hd (tdefn_plist d))
-            else Pconsarg (failwith "idk ce qu'il faut mettre ici", List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d))
+            else Pconsarg (".consarg_" ^ string_of_int !i, List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d))
             end, 
             tdefn_expr d (* todo: le type est faux *)
           )
@@ -315,7 +301,8 @@ and compile_expr = function
   List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
 
   (* on stocke les paramètres *)
-  (* s'il y a un nombre impair de paramètres, on rajoute un immédiat nul *)
+  (* s'il y a un nombre impair de paramètres, 
+     on rajoute un immédiat nul pour aligner la pile *)
   begin if ((List.length params) mod 2) = 1 then 
     subq (imm 8) (reg rsp) 
   else nop end ++
@@ -537,7 +524,7 @@ and compile_atom = function
 | AAconst (c, c_adr, t, res_adr) -> 
   compile_const c c_adr ++
   move_stack c_adr res_adr
-| AAlident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+| AAlident _ -> nop
 | AAuident (ident, t, addr) -> 
   movq (imm 8) (reg rdi) ++
   call "malloc" ++
@@ -627,9 +614,9 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
 | APconst (c, c_adr, address) -> 
-  compile_const c c_adr ++ (* TODO: change address *)
+  compile_const c c_adr ++
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:c_adr rbp) (reg r8) ++ (* TODO: change address *)
+  movq (ind ~ofs:c_adr rbp) (reg r8) ++
   cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->
