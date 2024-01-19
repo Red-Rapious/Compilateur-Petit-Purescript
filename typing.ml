@@ -52,6 +52,20 @@ let rec typ_eq t1 t2 =
   | TAlias t1, TAlias t2 -> t1 = t2
   | _, _ -> false
 
+let rec print_ttyp = function
+| TUnit -> "Unit"
+| TStr -> "Str"
+| TInt -> "Int"
+| TBool -> "Bool"
+| TCons(s, t) -> let rec aux = function | [] -> "" | h::t -> " " ^ print_ttyp(h) in "TCons " ^ s ^ aux(t)
+| TArrow(t1, t2) -> let rec aux = function | [] -> "" | h::t -> " " ^ print_ttyp(h) in "TArrow " ^ aux(t1) ^ " ->" ^ (print_ttyp t2)
+| TVar t -> (match t.def with | None -> "Tvar(None)" |Some t -> "TVar "^ print_ttyp(t))
+| TAlias t -> "TAlias " ^ t
+
+let rec print_ttyp_list = function 
+    | [] -> "\n"
+    | h::t -> print_ttyp(h) ^ "; "
+
 module V = struct
   type t = tvar
 
@@ -512,11 +526,14 @@ and typ_pattern global_env type_env instance_env t = function
 and typ_patarg global_env type_env instance_env t = function
   | l, Pconst c ->
       let ctau =
-        match c with Cbool _ -> TBool | Cint _ -> TInt | Cstring _ -> TStr
-      in
+        match c with Cbool c -> TBool | Cint c -> TInt | Cstring c -> TStr
+      in 
+      (match t with 
+      | TAlias _ -> global_env 
+      | _ ->
       if not (typ_eq ctau t) then
         typing_error l "mauvais type d'argument de pattern"
-      else global_env
+      else global_env)
   | l, Pident s when is_lower s -> add false s t global_env
   | l, Pident s ->
       if not (typ_eq (smaps_find s !cons_env).ctyp t) then
@@ -707,7 +724,7 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
   else (
     if deflist then eqlist := defn :: !eqlist;
     let (plist : loc_patarg list) = sand defn in
-    let global_env =
+    let globe_terrestre =
       if List.length plist <> List.length tlist then
         raise (BadTypesNumber (fst (List.nth plist (List.length plist - 1))));
       List.fold_right2
@@ -716,8 +733,9 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
           {
             bindings =
               Smaps.union
-                (fun _ _ _ ->
-                  raise (SimilarNames (placeholder_loc, "bindings")))
+                (fun x v _  -> Some v
+                  (* raise (SimilarNames (placeholder_loc, "bindings")) *)
+                  )
                 a.bindings envi.bindings;
             fvars = Vset.union a.fvars envi.fvars;
           })
@@ -731,13 +749,12 @@ and typ_defn global_env type_env instance_env deflist (defn : defn) tlist t =
           (scnd (smaps_find (fast defn) !function_env))
       else type_env
     in
-    let rtexp = typ_exp global_env type_env instance_env deflist (trad defn) in
+    let rtexp = typ_exp globe_terrestre type_env instance_env deflist (trad defn) in
     if not (typ_eq (type_of_texpr rtexp) t) then
       typing_error placeholder_loc "mauvais type de retour"
     else
       fast defn, List.map snd (sand defn), rtexp)
     
-
 (* Typage d'une déclaration "data" *)
 and typ_data (global_env : envs) (type_env : type_env ref)
     (instance_env : instance_env) (data : data) =
@@ -846,22 +863,31 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
       typ_instance global_env type_env instance_env (Iarrow ([], n), snd dinst)
   | Iarrow (nl, n) ->
       if Smaps.mem (fst n) instance_env then
-        raise (DoubleDefinition (placeholder_loc, fst n))
-      else
+        let k = Smaps.find (fst n) instance_env in 
+        if not (List.for_all2 (fun n1 n2 -> typ_eq (ast_ntype global_env type_env instance_env n1) (ast_ntype global_env type_env instance_env n2)) nl (frth k)) then
+        raise (DoubleDefinition (placeholder_loc, (fst n)))
+        else
         let cons_id = fst n in
         let sl, class_functions, fl = smaps_find cons_id !class_env in
-        let rec add_instance instance_env type_env = function
+        (* let rec add_instance instance_env type_env = function
           | [] -> instance_env
-          | n :: q ->
-              Smaps.add (fst n)
+          | h :: q ->
+              Smaps.add (fst h)
                 (( List.map (ast_atype global_env type_env instance_env) (snd n),
                    [] )
-                :: smaps_find (fst n) instance_env)
+                :: smaps_find (fst h) instance_env)
                 (add_instance instance_env type_env q)
-        in
-        let type_env = add_ntype_list type_env nl in
+        in*)
+        let add_instance jl global_env instance_env type_env =
+          let rec aux = function
+          | [] -> []
+          | h :: t -> ((fst h), List.map (ast_atype global_env type_env instance_env) (snd h)) :: (aux t)
+          in
+          let l = aux jl in
+          List.iter2  
+        let type_env = add_ntype_list type_env n in
         let type_env = add_atype type_env (snd n) in
-        let instance_env = add_instance instance_env type_env nl in
+        let instance_env = add_instance nl global_env instance_env type_env  in
         let aux tl1 tl2 =
           if unify tl1 tl2 then raise (UnifiableInstances placeholder_loc)
         in
@@ -885,6 +911,7 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
           (fun (defn : defn) ->
             match frst (smaps_find (fast defn) !function_env) with
             | TArrow (tlist, t) ->
+                curr_defined := fast defn;
                 ignore(typ_defn global_env type_env instance_env false defn
                   (List.map sub tlist) (sub t))
             | _ ->
@@ -926,7 +953,7 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
                   then raise (NonExhaustivePatternMatching placeholder_loc))
           | _ ->
               failwith "dans check_exhaust, le type récupéré n'est pas TArrow"
-        in
+        in 
 
         let rec requires = function
           | [] -> []
@@ -940,9 +967,9 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
         Smaps.iter (fun id t -> check_exhaust id t) class_functions;
         global_env_instances :=
           Smaps.add (fst n)
-            (( List.map (ast_atype global_env type_env instance_env) (snd n),
+            ((( List.map (ast_atype global_env type_env instance_env) (snd n),
                requirements )
-            :: smaps_find (fst n) !global_env_instances)
+            :: smaps_find (fst n) !global_env_instances), nl, n)
             !global_env_instances
 
 (* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
