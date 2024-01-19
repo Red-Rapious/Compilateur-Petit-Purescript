@@ -864,12 +864,12 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
   | Iarrow (nl, n) ->
       if Smaps.mem (fst n) instance_env then
         let k = Smaps.find (fst n) instance_env in 
-        if not (List.for_all2 (fun n1 n2 -> typ_eq (ast_ntype global_env type_env instance_env n1) (ast_ntype global_env type_env instance_env n2)) nl (frth k)) then
+        if List.for_all2 typ_eq (fst (List.hd k)) (List.map (ast_atype global_env type_env instance_env) (snd n)) then
         raise (DoubleDefinition (placeholder_loc, (fst n)))
         else
         let cons_id = fst n in
         let sl, class_functions, fl = smaps_find cons_id !class_env in
-        (* let rec add_instance instance_env type_env = function
+        let rec add_instance instance_env type_env = function
           | [] -> instance_env
           | h :: q ->
               Smaps.add (fst h)
@@ -877,17 +877,10 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
                    [] )
                 :: smaps_find (fst h) instance_env)
                 (add_instance instance_env type_env q)
-        in*)
-        let add_instance jl global_env instance_env type_env =
-          let rec aux = function
-          | [] -> []
-          | h :: t -> ((fst h), List.map (ast_atype global_env type_env instance_env) (snd h)) :: (aux t)
-          in
-          let l = aux jl in
-          List.iter2  
-        let type_env = add_ntype_list type_env n in
+        in
+        let type_env = add_ntype_list type_env nl in
         let type_env = add_atype type_env (snd n) in
-        let instance_env = add_instance nl global_env instance_env type_env  in
+        let instance_env = add_instance instance_env type_env nl in
         let aux tl1 tl2 =
           if unify tl1 tl2 then raise (UnifiableInstances placeholder_loc)
         in
@@ -967,9 +960,9 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
         Smaps.iter (fun id t -> check_exhaust id t) class_functions;
         global_env_instances :=
           Smaps.add (fst n)
-            ((( List.map (ast_atype global_env type_env instance_env) (snd n),
+            (( List.map (ast_atype global_env type_env instance_env) (snd n),
                requirements )
-            :: smaps_find (fst n) !global_env_instances), nl, n)
+            :: smaps_find (fst n) !global_env_instances)
             !global_env_instances
 
 (* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
