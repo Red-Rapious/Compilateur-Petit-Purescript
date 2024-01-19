@@ -201,35 +201,35 @@ let alloc genv tdecl_list : adecl list =
   let tdefn_buffer = ref [] in
   let adecl_list : adecl list ref = ref [] in
 
+  (* l'ojectif de cette fonction est de transformer les tdefn 
+     accumulées en une seule tdefn comprenant un case *)
   let process_tdefn_buffer () = 
     begin match List.length !tdefn_buffer with
-      | 0 -> ()
-      | 1 -> adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
+      | 0 -> () (* pas de tdefn en attente *)
+      | 1 -> (* une seule tdefn, on la compile normalement *)
+        adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
       | _ -> 
-        let name = tdefn_name (List.hd !tdefn_buffer) in
-        let i = ref (-1) in
+        (* au moins 2 tdefn, on les compile en une seule avec un case *)
         let branch_list = List.map (fun d ->
           let plist = tdefn_plist d in
-          incr i ;
-          (* TODO: nettoyage de cette mocheté *)
-          (*(
-            begin if List.length (tdefn_plist d) = 1 then 
-              Parg (Typing.placeholder_loc, List.hd (tdefn_plist d))
-            else Pconsarg (".consarg_" ^ string_of_int !i, List.map (fun p -> (Typing.placeholder_loc, p)) (tdefn_plist d))
-            end, 
-            tdefn_expr d (* todo: le type est faux *)
-          )*)
-          (* on prend le dernier argument *)
-          Parg (Typing.placeholder_loc, List.nth plist ((List.length plist) - 1)), tdefn_expr d
+          (* on remplace le dernier argument par la variable de case *)
+          let last_arg = List.nth plist ((List.length plist) - 1) in
+          Parg (Typing.placeholder_loc, last_arg), tdefn_expr d
         ) (List.rev !tdefn_buffer) in
+
+        (* (ce type est mauvais, je le sais) *)
         let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
         let expr = TEcase (
+          (* on switch selon la nouvelle variable introduite *)
           TEatom(TAident(".match_variable", t), t),
           branch_list,
           TStr
         ) in
+
         let plist = tdefn_plist (List.hd !tdefn_buffer) in
         let patarg_list = (List.mapi (fun i patarg ->
+          (* à la place de la variable sur laquelle on effectue le case, 
+             on met la nouvelle variable introduite *)
           if i = (List.length plist) - 1 then (Pident ".match_variable")
           else patarg
         ) plist)
@@ -237,7 +237,7 @@ let alloc genv tdecl_list : adecl list =
         (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
         adecl_list := 
         (alloc_decl genv (TDefn (
-          name, patarg_list, expr
+          tdefn_name (List.hd !tdefn_buffer), patarg_list, expr
         ))) :: !adecl_list 
     end ;
     tdefn_buffer := []
@@ -245,9 +245,15 @@ let alloc genv tdecl_list : adecl list =
 
   List.iter (fun tdecl -> 
     match tdecl with
-    | TDefn tdefn -> tdefn_buffer := tdefn :: !tdefn_buffer
-    | _ -> process_tdefn_buffer (); adecl_list := alloc_decl genv tdecl :: !adecl_list 
+    | TDefn tdefn -> 
+      (* si on tombe sur un tdefn, on le met en attente *)
+      tdefn_buffer := tdefn :: !tdefn_buffer
+    | _ -> 
+      (* si on croise autre chose, on traite d'abord les tdefn en attente *)
+      process_tdefn_buffer (); 
+      adecl_list := alloc_decl genv tdecl :: !adecl_list 
   ) tdecl_list ;
+  (* on traite les tdefn qui restent éventuellement *)
   process_tdefn_buffer () ;
 
   List.rev !adecl_list
