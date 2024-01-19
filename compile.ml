@@ -20,20 +20,22 @@ let create_pos_fpcur () =
   let fpcur = ref 8 in 
   (fun () -> fpcur := !fpcur + 8 ; !fpcur)
 
-(*let init_fpcur init =
-  let fpcur = ref init in 
-  (fun () -> fpcur := !fpcur -8 ; !fpcur)*)
+let find_in_env name env = 
+match Smap.find_opt name env with
+| Some x -> x
+| None -> raise (UndefIdent name)
 
 (* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
 | TDefn d -> alloc_defn genv d
 | TDfdecl d -> alloc_fdecl d
-| TDdata d -> alloc_data d
-| TDclass c -> alloc_class c
-| TDinstance (instance, dlist) -> failwith "alloc_decl: instances todo"
+| TDdata d -> ADdata d
+| TDclass c -> ADclass c
+| TDinstance (instance, dlist) -> ADinstance (instance, []) (* todo: change? *)
 
 and alloc_defn genv (ident, plist, expr) : adecl = 
+  if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
   let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
 
@@ -83,31 +85,30 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   (* TEuident *)
   end else begin
     let aargs = List.map (alloc_atom genv env fpcur) targs in 
-    AEuident (Smap.find name genv, aargs, t, fpcur ()) 
+    AEuident (find_in_env name genv, aargs, t, fpcur ()) 
   end
 | TEdo (expr_list, t) -> 
   let aexpr_list = List.map (alloc_expr genv env fpcur) expr_list in
   AEdo (aexpr_list, t, fpcur ())
 | TElet (binding_list, expr, typ) ->
-  (* TODO: faire les deux boucles en une seule *)
-  (* on ajoute à l'environnement les positions des bindings *)
+  (* on ajoute d'abord à l'environnement les addresses des bindings *)
   let env = List.fold_left (
     fun acc_env (bident, _btype) -> 
       Smap.add bident (fpcur ()) acc_env
     ) env binding_list 
   in
 
-  (* allocation des expressions dans le binding *)
+  (* ensuite, allocation des expressions dans le binding *)
   let abinding = List.fold_left (fun l (bident, bexpr) ->
     begin 
       let expr = alloc_expr genv env fpcur bexpr in
-      let res_adr = Smap.find bident env in
+      let res_adr = find_in_env bident env in
       (res_adr, expr)
     end :: l
   ) [] binding_list 
   in
 
-  (* allocation de l'expression dans le in *)
+  (* enfin, allocation de l'expression dans le in *)
   let aexpr = alloc_expr genv env fpcur expr in
   AElet (abinding, aexpr, typ, fpcur ())
 
@@ -129,24 +130,12 @@ and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = functi
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
   | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
-  | _ -> let adr = Smap.find ident env in AAlident (t, adr))
-    (*begin
-      match Smap.find_opt ident env with
-      | Some c -> AAlident (t, c)
-      | None -> begin
-        match Smap.find_opt ident genv with
-        | Some c -> 
-          let address = fpcur () in 
-          AAlident (t, address)
-        | None -> raise (UndefIdent ident)
-      end
-    end*)
-    
+  | _ -> let adr = find_in_env ident env in AAlident (t, adr))
 
   (* TAuident *)
   else begin
     let address = fpcur () in 
-    let data_constr = Smap.find ident genv in 
+    let data_constr = find_in_env ident genv in 
     if snd data_constr <> 0 then failwith "wesh ya des paramètres" else
     AAuident (fst data_constr, t, address)
   end
@@ -163,7 +152,7 @@ and alloc_patarg genv fpcur = function
 
   (* uident *)
   end else 
-    APuident (fst (Smap.find ident genv), fpcur ()), Smap.empty
+    APuident (fst (find_in_env ident genv), fpcur ()), Smap.empty
 | _ -> failwith "alloc_patarg: todo"
 
 and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
@@ -175,12 +164,12 @@ and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) =
   (apattern, alloc_expr genv union_env fpcur texpr)
 
 and alloc_pattern genv fpcur = function 
-(* TODO : se débarasser des localisations *)
+(* TODO : se débarasser des localisations plus tôt *)
 | Parg (_, tpatarg) -> 
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
 | Pconsarg (ident, tpatarg_list) -> 
-  let uid = fst (Smap.find ident genv) in
+  let uid = fst (find_in_env ident genv) in
   let env = ref Smap.empty in 
   let apatarg_list = List.map (fun (_, tpatarg) ->
     let apatarg, env' = alloc_patarg genv fpcur tpatarg in 
@@ -201,10 +190,73 @@ and alloc_fdecl fdecl = ADfdecl {
   atypes = fdecl.ttypes;
   aout_type = fdecl.tout_type
 }
-and alloc_data data = ADdata data
-and alloc_class c = failwith "alloc_class: todo"
 
-let alloc genv = List.map (alloc_decl genv)
+(*let alloc genv = List.map (alloc_decl genv)*)
+
+let tdefn_name (n, _, _) = n
+let tdefn_plist (_, p, _) = p
+let tdefn_expr (_, _, e) = e
+
+let alloc genv tdecl_list : adecl list = 
+  let tdefn_buffer = ref [] in
+  let adecl_list : adecl list ref = ref [] in
+
+  (* l'ojectif de cette fonction est de transformer les tdefn 
+     accumulées en une seule tdefn comprenant un case *)
+  let process_tdefn_buffer () = 
+    begin match List.length !tdefn_buffer with
+      | 0 -> () (* pas de tdefn en attente *)
+      | 1 -> (* une seule tdefn, on la compile normalement *)
+        adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
+      | _ -> 
+        (* au moins 2 tdefn, on les compile en une seule avec un case *)
+        let branch_list = List.map (fun d ->
+          let plist = tdefn_plist d in
+          (* on remplace le dernier argument par la variable de case *)
+          let last_arg = List.nth plist ((List.length plist) - 1) in
+          Parg (Typing.placeholder_loc, last_arg), tdefn_expr d
+        ) (List.rev !tdefn_buffer) in
+
+        (* (ce type est mauvais, je le sais) *)
+        let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
+        let expr = TEcase (
+          (* on switch selon la nouvelle variable introduite *)
+          TEatom(TAident(".match_variable", t), t),
+          branch_list,
+          TStr
+        ) in
+
+        let plist = tdefn_plist (List.hd !tdefn_buffer) in
+        let patarg_list = (List.mapi (fun i patarg ->
+          (* à la place de la variable sur laquelle on effectue le case, 
+             on met la nouvelle variable introduite *)
+          if i = (List.length plist) - 1 then (Pident ".match_variable")
+          else patarg
+        ) plist)
+        in
+        (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
+        adecl_list := 
+        (alloc_decl genv (TDefn (
+          tdefn_name (List.hd !tdefn_buffer), patarg_list, expr
+        ))) :: !adecl_list 
+    end ;
+    tdefn_buffer := []
+  in
+
+  List.iter (fun tdecl -> 
+    match tdecl with
+    | TDefn tdefn -> 
+      (* si on tombe sur un tdefn, on le met en attente *)
+      tdefn_buffer := tdefn :: !tdefn_buffer
+    | _ -> 
+      (* si on croise autre chose, on traite d'abord les tdefn en attente *)
+      process_tdefn_buffer (); 
+      adecl_list := alloc_decl genv tdecl :: !adecl_list 
+  ) tdecl_list ;
+  (* on traite les tdefn qui restent éventuellement *)
+  process_tdefn_buffer () ;
+
+  List.rev !adecl_list
 
 
 (* PRODUCTION DU CODE *)
@@ -231,11 +283,13 @@ let include_print_int = ref false
 let include_div = ref false
 let include_concat = ref false
 
+(* todo: retirer les constructions inutiles *)
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
-| ADfdecl d -> nop
-| ADdata data -> nop
-| _ -> failwith "compile_decl: todo"
+| ADfdecl _ -> nop
+| ADdata _ -> nop
+| ADinstance _ -> nop
+| ADclass _ -> nop
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 
   if !dbg then Pretty.pp_aexpr std_formatter 0 aexpr ;
@@ -262,7 +316,8 @@ and compile_expr = function
   List.fold_left (fun code atom -> code ++ compile_atom atom) nop params ++
 
   (* on stocke les paramètres *)
-  (* s'il y a un nombre impair de paramètres, on rajoute un immédiat nul *)
+  (* s'il y a un nombre impair de paramètres, 
+     on rajoute un immédiat nul pour aligner la pile *)
   begin if ((List.length params) mod 2) = 1 then 
     subq (imm 8) (reg rsp) 
   else nop end ++
@@ -484,7 +539,7 @@ and compile_atom = function
 | AAconst (c, c_adr, t, res_adr) -> 
   compile_const c c_adr ++
   move_stack c_adr res_adr
-| AAlident _ -> nop (* TODO : vérifier que ça marche bien comme ça *)
+| AAlident _ -> nop
 | AAuident (ident, t, addr) -> 
   movq (imm 8) (reg rdi) ++
   call "malloc" ++
@@ -514,7 +569,7 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
 
       compile_const c c_adr ++
       movq (ind ~ofs:condition_adr rbp) (reg r8) ++
-      movq (ind ~ofs:(failwith "find address of const") rbp) (reg r9) ++
+      movq (ind ~ofs:c_adr rbp) (reg r9) ++
       cmpq (reg r8) (reg r9) ++
       
       (* si le pattern ne match pas, on va au prochain cas *)
@@ -574,9 +629,9 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
 | APconst (c, c_adr, address) -> 
-  compile_const c c_adr ++ (* TODO: change address *)
+  compile_const c c_adr ++
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:c_adr rbp) (reg r8) ++ (* TODO: change address *)
+  movq (ind ~ofs:c_adr rbp) (reg r8) ++
   cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->
@@ -609,9 +664,13 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   | _ -> ()
   ) p ;
 
-  if !dbg then Pretty.pp_genv Format.std_formatter !genv ;
-
+  if !dbg then begin 
+    Pretty.pp_genv Format.std_formatter !genv ;
+    Format.printf "== TYPED AST ==@."
+  end ;
+  
   let p = alloc !genv p in
+  if !dbg then Format.printf "== ALLOCATED AST ==@." ;
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in
   
   let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) (Hashtbl.create 17)

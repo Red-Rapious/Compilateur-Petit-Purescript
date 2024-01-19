@@ -222,4 +222,4 @@ type adecl =
 | ADfdecl of afdecl
 | ADdata of data
 | ADclass of clas
-| ADinstance of instance * (adefn list)
+| ADinstance of tinstance * (adefn list)
