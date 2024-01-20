@@ -10,8 +10,7 @@ let dbg = ref false
 module Smap = Map.Make(String)
 type local_env = int Smap.t
 
-type tfpcur = (unit -> int)
-
+(* générateur de compteurs *)
 let create_neg_fpcur () = 
   let fpcur = ref 0 in 
   (fun () -> fpcur := !fpcur - 8 ; !fpcur)
@@ -25,16 +24,15 @@ match Smap.find_opt name env with
 | Some x -> x
 | None -> raise (UndefIdent name)
 
-(* Retourne un tuple contenant l'AST décoré et la frame size actuelle *)
 let rec alloc_decl genv (decl:tdecl) : adecl =
 match decl with
-| TDefn d -> alloc_defn genv d
+| TDefn d -> ADefn (alloc_defn genv d)
 | TDfdecl d -> alloc_fdecl d
 | TDdata d -> ADdata d
 | TDclass c -> ADclass c
-| TDinstance (instance, dlist) -> ADinstance (instance, []) (* todo: change? *)
+| TDinstance (instance, dlist) -> ADinstance (instance, List.map (fun d -> alloc_defn genv d) dlist) (* todo: change? *)
 
-and alloc_defn genv (ident, plist, expr) : adecl = 
+and alloc_defn genv (ident, plist, expr) : adefn = 
   if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
   let fpcur = create_pos_fpcur () in
   let env = ref Smap.empty in 
@@ -51,9 +49,9 @@ and alloc_defn genv (ident, plist, expr) : adecl =
 
   let fpcur' = create_neg_fpcur () in
   let a_expr = alloc_expr genv !env fpcur' expr in 
-  ADefn (ident, patargs, a_expr, abs (fpcur' ()))
+  (ident, patargs, a_expr, abs (fpcur' ()))
 
-and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= function 
+and alloc_expr genv (env: local_env) fpcur : (texpr -> aexpr)= function 
 | TEatom (a, t) -> 
   let aatom = alloc_atom genv env fpcur a
   in AEatom(aatom, t, address_of_aatom aatom)
@@ -117,7 +115,7 @@ and alloc_expr genv (env: local_env) (fpcur: tfpcur) : (texpr -> aexpr)= functio
   and ablist = List.map (alloc_branch genv env fpcur) tblist in 
   AEcase (aexpr, ablist, t, fpcur ())
 
-and alloc_atom genv (env: local_env) (fpcur: tfpcur) : (tatom -> aatom) = function 
+and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function 
 | TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, c_adr)
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr genv env fpcur e in 
@@ -155,7 +153,7 @@ and alloc_patarg genv fpcur = function
     APuident (fst (find_in_env ident genv), fpcur ()), Smap.empty
 | _ -> failwith "alloc_patarg: todo"
 
-and alloc_branch genv (env: local_env) (fpcur: tfpcur) (tpattern, texpr) = 
+and alloc_branch genv (env: local_env) fpcur (tpattern, texpr) = 
   let apattern, env' = alloc_pattern genv fpcur tpattern in 
   let union_env = Smap.union (fun id address1 _ -> 
     if id = "_" then Some address1 
@@ -180,8 +178,6 @@ and alloc_pattern genv fpcur = function
     apatarg
   ) tpatarg_list in
   APconsarg (uid, apatarg_list), !env
-
-and alloc_binding (env: local_env) (fpcur: tfpcur) b = failwith "alloc_binding: todo"
 
 and alloc_fdecl fdecl = ADfdecl {
   aname = fdecl.tname ;
@@ -288,7 +284,10 @@ let rec compile_decl = function
 | ADefn d -> compile_defn d
 | ADfdecl _ -> nop
 | ADdata _ -> nop
-| ADinstance _ -> nop
+| ADinstance (_, adefn_list) -> 
+  List.fold_left (fun code defn -> 
+    code ++ compile_defn defn
+  ) nop adefn_list
 | ADclass _ -> nop
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 

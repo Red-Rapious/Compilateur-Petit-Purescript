@@ -171,6 +171,8 @@ type tfile = { tmodule_name: string ; tmain : tdecl list }
 (* AST généré après l'allocation des variables *)
 type frame_size = int
 
+type data_constr = int * int
+
 (* le dernier entier stocke l'adresse du résultat du calcul *)
 type aexpr =
 | AEatom of aatom * ttyp * int
@@ -181,7 +183,7 @@ type aexpr =
 | AEdo of aexpr list * ttyp * int
 | AElet of abinding list * aexpr * ttyp * int
 | AEcase of aexpr * (abranch list) * ttyp * int
-| AEuident of (int * int) * (aatom list) * ttyp * int
+| AEuident of data_constr * (aatom list) * ttyp * int
 and aatom =
   (* le permier int est pour l'adresse de la constante
      un peu bancal mais ça marche je crois *)
