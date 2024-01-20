@@ -237,13 +237,12 @@ let alloc genv tdecl_list : adecl list =
           Parg (Typing.placeholder_loc, List.nth plist replace_index), expr
         ) (List.rev !tdefn_buffer) in
 
-        (* (ce type est mauvais, je le sais) *)
         let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
         let expr = TEcase (
           (* on case selon la nouvelle variable introduite *)
           TEatom(TAident(".match_variable", t), t),
           branch_list,
-          TStr
+          t
         ) in
 
         let plist = tdefn_plist (List.hd !tdefn_buffer) in
@@ -291,6 +290,7 @@ let move_stack ofs1 ofs2 =
     movq (reg rdx) (ind ~ofs:ofs2 rbp)
   else nop
 
+(* compteurs divers servant d'indentifiants uniques pour les labels *)
 let comparaison_count = ref 0
 let lazy_count = ref 0
 let if_count = ref 0
@@ -298,6 +298,7 @@ let branch_count = ref 0
 let matching_count = ref 0
 let hardcoded_strings = ref []
 
+(* booléens mis à jour lorsque le code nécessite une fonction pré-programmée en assembleur *)
 let include_print_bool = ref false
 let include_print_int = ref false
 let include_div = ref false
@@ -308,11 +309,11 @@ let rec compile_decl = function
 | ADefn d -> compile_defn d
 | ADfdecl _ -> nop
 | ADdata _ -> nop
+| ADclass _ -> nop
 | ADinstance (_, adefn_list) -> 
   List.fold_left (fun code defn -> 
     code ++ compile_defn defn
   ) nop adefn_list
-| ADclass _ -> nop
 
 and compile_defn (ident, patargs, aexpr, fpmax) = 
   if !dbg then Pretty.pp_aexpr std_formatter 0 aexpr ;
@@ -365,6 +366,7 @@ and compile_expr = function
   addq (imm (round_16 (8*List.length params))) (reg rsp) ++
   (* on place le résultat là où demandé *)
   movq (reg rax) (ind ~ofs:res_adr rbp)
+
 | AEbinop (e1, binop, e2, t, a) -> 
   begin 
     match binop with
@@ -372,20 +374,23 @@ and compile_expr = function
     | Band | Bor -> compile_lazy_binop (e1, binop, e2, t, a)
     | _ -> compile_binop_compare (e1, binop, e2, t, a)
   end
+
 | AEunop (Uneg, aexpr, t, res_adr) ->
   compile_expr aexpr ++
   let eadr = address_of_aexpr aexpr in 
   movq (imm 0) (reg r8) ++
   subq (ind ~ofs:eadr rbp) (reg r8) ++
   movq (reg r8) (ind ~ofs:res_adr rbp)
+
 | AEdo (expr_list, t, res_adr) ->
   List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
   movq (imm 0) (ind ~ofs:res_adr rbp)
+
 | AEif (e1, e2, e3, _, res_adr) -> 
   let if_case_true = ".if_case_true_" ^ (string_of_int !if_count)
-  and if_exit = ".if_exit_" ^ (string_of_int !if_count)
-  in
+  and if_exit = ".if_exit_" ^ (string_of_int !if_count) in
   incr if_count ;
+
   compile_expr e1 ++
   movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg rax) ++
   testq (reg rax) (reg rax) ++
@@ -405,10 +410,10 @@ and compile_expr = function
   label if_exit
 
 | AElet (abinding_list, aexpr, t, res_adr) -> 
+  (* on traite les bindings *)
   List.fold_left (fun code (badr, bexpr) -> 
     compile_expr bexpr ++
-    movq (ind ~ofs:(address_of_aexpr bexpr) rbp) (reg rax) ++
-    movq (reg rax) (ind ~ofs:badr rbp)  ++
+    move_stack (address_of_aexpr bexpr) badr ++
     code
   ) nop abinding_list ++
 
@@ -416,31 +421,34 @@ and compile_expr = function
      et on met son résultat à la bonne position *)
   compile_expr aexpr ++
   move_stack (address_of_aexpr aexpr) res_adr
+
 | AEcase (aexpr, blist, t, res_adr) -> 
   let branch_exit_label = ".branch_exit_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
 
+  (* on compile l'expression de la disjonction *)
   compile_expr aexpr ++
+  (* on compile les branches *)
   List.fold_left (fun code (bpattern, bexpr) ->
-    code ++ (* trop longtemps à debug *)
+    code ++
     compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern
   ) nop blist ++
-  (movq (imm 0) (ind ~ofs:res_adr rbp))  ++
+  (*(movq (imm 0) (ind ~ofs:res_adr rbp))  ++*)
   
   label branch_exit_label
 
 | AEuident (data_constr, params, types, res_adr) -> 
   let i = ref 0 in
-  comment "compilation de AEuident" ++
+
   (* on alloue de la place (cf. sujet) *)
   movq (imm (8*(snd data_constr + 1))) (reg rdi) ++
   call "malloc" ++
   movq (reg rax) (ind ~ofs:res_adr rbp) ++
   movq (imm (fst data_constr)) (ind rax) ++
+  (* on traite tous les paramètres *)
   List.fold_left (fun code aatom ->
     incr i ;
     code ++
-    comment (string_of_int !i) ++
     compile_atom aatom ++
     movq (ind ~ofs:res_adr rbp) (reg r9) ++
     movq (ind ~ofs:(address_of_aatom aatom) rbp) (reg rdx) ++
@@ -451,7 +459,7 @@ and compile_binop (e1, binop, e2, t, res_adr) =
   compile_expr e1 ++
   compile_expr e2 ++
   let a1, a2 = address_of_aexpr e1, address_of_aexpr e2 in 
-  (* le cas de la division est un peu spécial *)
+  (* le cas de la division est ramené à un appel de fonction pré-écrite *)
   if binop = Bdiv then begin
     include_div := true ;
     pushq (ind ~ofs:a2 rbp) ++
@@ -459,6 +467,7 @@ and compile_binop (e1, binop, e2, t, res_adr) =
     call ".div" ++
     movq (reg rax) (ind ~ofs:res_adr rbp)
   end
+  (* idem pour la concaténation *)
   else if binop = Bconcat then begin 
     include_concat := true ;
     pushq (ind ~ofs:a2 rbp) ++
@@ -489,11 +498,13 @@ and compile_lazy_binop (e1, binop, e2, t, res_adr) =
   | Band -> je, 0
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
   in
+  (* on ne compile que l'expression e1 pour respecter le caractère paresseux *)
   compile_expr e1 ++
   movq (ind ~ofs:(address_of_aexpr e1) rbp) (reg r8) ++
   testq (reg r8) (reg r8) ++
   instruction lazy_continue ++
 
+  (* l'expression e2 n'est calculée que si la première expression n'est pas bonne *)
   compile_expr e2 ++
   move_stack (address_of_aexpr e2) res_adr ++
   jmp lazy_end ++
@@ -517,43 +528,38 @@ and compile_binop_compare (e1, binop, e2, t, res_adr) =
   | Beq when expr_type = TUnit -> movq (imm 1) (ind ~ofs:res_adr rbp) (* toujours vrai *)
   | Beq when expr_type = TStr -> 
     let uid = string_of_int !comparaison_count in 
-    let cmp_is_true = ".cmp_is_true_" ^ uid
-    and cmp_is_false = ".cmp_is_false_" ^ uid in
+    let cmp_end = ".cmp_end_" ^ uid in
     incr comparaison_count ;
     
+    (* on place les deux étiquettes dans les bons registres et on 
+       laisse libc faire la comparaison pour nous *)
     movq (ind ~ofs:a1 rbp) (reg rdi) ++
     movq (ind ~ofs:a2 rbp) (reg rsi) ++
     call "strcmp" ++
     testq (reg rax) (reg rax) ++
 
-    jz cmp_is_true ++
     movq (imm 0) (ind ~ofs:res_adr rbp) ++
-    jmp cmp_is_false ++
-
-    label cmp_is_true ++
+    jnz cmp_end ++
     movq (imm 1) (ind ~ofs:res_adr rbp) ++
     
-    label cmp_is_false
+    label cmp_end
   | Beq -> failwith "la comparaison doit être effectuée entre deux expressions entières ou booléennes."
   | _ -> failwith ("ce cas est sensé avoir été traité par compile_binop. Opérateur : " ^ (Pretty.print_binop binop))
-and comparaison_code instruction a1 a2 res_adr =
+
+  and comparaison_code instruction a1 a2 res_adr =
   let uid = string_of_int !comparaison_count in 
-  let cmp_is_true = ".cmp_is_true_" ^ uid
-  and cmp_is_false = ".cmp_is_false_" ^ uid in
+  let cmp_end = ".cmp_end_" ^ uid in
   incr comparaison_count ;
   
   movq (ind ~ofs:a1 rbp) (reg r13) ++
   movq (ind ~ofs:a2 rbp) (reg r12) ++
   cmpq (reg r12) (reg r13) ++
 
-  instruction cmp_is_true ++
-  movq (imm 0) (ind ~ofs:res_adr rbp) ++
-  jmp cmp_is_false ++
-
-  label cmp_is_true ++
   movq (imm 1) (ind ~ofs:res_adr rbp) ++
-  
-  label cmp_is_false
+  instruction cmp_end ++
+
+  movq (imm 0) (ind ~ofs:res_adr rbp) ++
+  label cmp_end
 
 and compile_atom = function 
 | AAexpr (expr, t, res_adr) -> 
@@ -612,9 +618,11 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
         incr branch_count ;
         movq (ind ~ofs:condition_adr rbp) (reg r8) ++
         cmpq (imm uid) (ind r8) ++
+
         jne branch_continue_label ++
         compile_expr expr_true ++
         move_stack (address_of_aexpr expr_true) res_adr ++
+        
         jmp end_label ++
         label branch_continue_label
     | APpattern (pattern, address) -> 
@@ -663,11 +671,12 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = funct
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
   movq (ind ~ofs:(8*i) r9) (reg rdx) ++
   movq (reg rdx) (ind ~ofs:address rbp) ++
-  (* TODO: find a way to not compile anything with the expr *)
-  compile_pattern address res_adr (failwith "compile nothing") matching_label pattern ++
+  (* TODO: ajouter un moyen de ne rien compiler *)
+  compile_pattern address res_adr (failwith "ne rien compiler") matching_label pattern ++
   jmp branch_continue_label ++
   label matching_label
 
+(* identifiant unique pour les datas *)
 let data_count = ref 0
 let compile_program (p : tdecl list) ofile dbg_mode =
   dbg := dbg_mode ;
@@ -677,6 +686,7 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   | TDdata data -> 
     let data_constr = ref Smap.empty in
     List.iter (fun (ident, t) -> 
+      (* on ajout à l'environnemnet global l'identifiant unique et le nombre d'arguments *)
       let constr = (!data_count, List.length t) in
       incr data_count ;
       data_constr := Smap.add ident constr !data_constr) data.types ;
@@ -700,8 +710,8 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   begin
     label ".Sprint_int" ++ string "%d\n" ++
     label ".Sprint_string" ++ string "%s\n" ++
-    label "true" ++ string "true" ++
-    label "false" ++ string "false" ++
+    label ".true" ++ string "true" ++
+    label ".false" ++ string "false" ++
     List.fold_left (fun code (label_name, str) ->
       code ++ label label_name ++ string str
     ) nop (List.rev !hardcoded_strings) (* le List.rev est juste à des fins décoratives *)
@@ -716,21 +726,22 @@ let compile_program (p : tdecl list) ofile dbg_mode =
 
         (* afficheur d'entiers *)
         begin if !include_print_int then begin (* n'ajoute le code de la fonction que s'il est réellement utilisé *)
-        (* TODO : personnaliser *)
         label ".print_int" ++
         enter (imm 0) ++
-        movq (imm 24) (reg rdi) ++
+
+        movq (imm (3*8)) (reg rdi) ++ (* 3 * 8 = 24 *)
         call "malloc" ++
-        movq (reg rax) (reg rdi) ++
-        movq (ilab ".Sprint_int") (reg rsi) ++
-        xorq (reg rax) (reg rax) ++
         movq (ind ~ofs:16 rbp) (reg rdx) ++
+        movq (ilab ".Sprint_int") (reg rsi) ++
+        movq (reg rax) (reg rdi) ++
+        xorq (reg rax) (reg rax) ++
         call "sprintf" ++
-        movq (reg rax) (reg r8) ++
+        movq (reg rax) (reg rbx) ++
         movq (reg rdi) (reg rax) ++
-        subq (reg r8) (reg rax) ++
-        addq (reg rax) (reg r8) ++  (* pour retirer le dernier charactère *)
-        movb (imm 0) (ind ~ofs:(-1) r8) ++
+        subq (reg rbx) (reg rax) ++
+        addq (reg rax) (reg rbx) ++
+        movq (imm 0) (ind ~ofs:(-1) rbx) ++
+
         leave ++
         ret 
         end else nop end ++
@@ -748,9 +759,6 @@ let compile_program (p : tdecl list) ofile dbg_mode =
 
         (* la fonction pure de purescript *)
         label "pure" ++
-        enter (imm 0) ++
-        movq (imm 0) (reg rax) ++ (* retourne toujours 0 *)
-        leave ++
         ret ++
 
         (* fonction not de purescript *)
@@ -763,6 +771,7 @@ let compile_program (p : tdecl list) ofile dbg_mode =
         movq (imm 0) (reg rax) ++
         leave ++
         ret ++
+
         label ".not_0" ++
         movq (imm 1) (reg rax) ++
         leave ++
@@ -787,7 +796,7 @@ let compile_program (p : tdecl list) ofile dbg_mode =
         leave ++
         ret ++
 
-        label ".div_s" ++
+        label ".div_s" ++ (* cas négatif *)
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm (-1)) (reg rdx) ++
         idivq (reg rcx) ++
@@ -814,20 +823,8 @@ let compile_program (p : tdecl list) ofile dbg_mode =
 
         (* fonction mod de purescript *)
         (* là encore, la complexité vient du fait que idivq peut retourner 
-          un résultat négatif, ce que l'on ne veut pas (cf. arith2.out) *)
-        (* "l'algorithme" est le même que pour _div *)
-        (*label "mod" ++
-        enter (imm 0) ++
-        movq (ind ~ofs:16 rbp) (reg rax) ++
-        movq (ind ~ofs:24 rbp) (reg rbx) ++
-        cqto ++ 
-        idivq !%rbx ++
-        (* on met le résultat dans rax, qui sera ensuite 
-           recopié sur la pile par l'instruction suivante (cf. compile_expr)*)
-        movq (reg rdx) (reg rax) ++
-        leave ++
-        ret ++*)
-
+          un résultat négatif, ce que l'on ne veut pas *)
+        (* "l'algorithme" est le même que pour .div *)
         label "mod" ++
         enter (imm 0) ++
         movq (ind ~ofs:16 rbp) (reg rax) ++
@@ -845,7 +842,6 @@ let compile_program (p : tdecl list) ofile dbg_mode =
         movq (ind ~ofs:24 rbp) (reg rcx) ++
         movq (imm (-1)) (reg rdx) ++
         idivq (reg rcx) ++
-        (*testq (reg rdx) (reg rdx) ++*)
         movq (reg rdx) (reg rax) ++
         testq (reg rax) (reg rax) ++
         jz ".mod_0" ++
@@ -871,12 +867,12 @@ let compile_program (p : tdecl list) ofile dbg_mode =
         enter (imm 0) ++
         cmpq (imm 0) (ind ~ofs:16 rbp) ++
         je ".Lfalse" ++
-        movq (ilab "true") (reg rax) ++
+        movq (ilab ".true") (reg rax) ++
         leave ++
         ret ++
         
         label ".Lfalse" ++
-        movq (ilab "false") (reg rax) ++
+        movq (ilab ".false") (reg rax) ++
         leave ++
         ret
         end else nop end ++
