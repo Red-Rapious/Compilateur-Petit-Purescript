@@ -134,7 +134,7 @@ and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function
   else begin
     let address = fpcur () in 
     let data_constr = find_in_env ident genv in 
-    if snd data_constr <> 0 then failwith "wesh ya des paramètres" else
+    if snd data_constr <> 0 then failwith "les data avec paramètres ne sont pas supportées" else
     AAuident (fst data_constr, t, address)
   end
 
@@ -151,7 +151,9 @@ and alloc_patarg genv fpcur = function
   (* uident *)
   end else 
     APuident (fst (find_in_env ident genv), fpcur ()), Smap.empty
-| _ -> failwith "alloc_patarg: todo"
+| Ppattern tpattern -> 
+  let apattern, env = alloc_pattern genv fpcur tpattern in 
+  APpattern (apattern, fpcur ()), env
 
 and alloc_branch genv (env: local_env) fpcur (tpattern, texpr) = 
   let apattern, env' = alloc_pattern genv fpcur tpattern in 
