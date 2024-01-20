@@ -410,7 +410,7 @@ let rec typ_exp global_env type_env
                         not
                           (typ_eq t
                              (type_of_tatom (typ_atom global_env type_env instance_env global a)))
-                      then ()(*typing_error loc "mauvais type d'argument"*)
+                      then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
               | _ -> raise (TooManyArguments loc)
             in
