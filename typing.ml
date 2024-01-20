@@ -332,7 +332,7 @@ let rec typ_exp global_env type_env
             not
               (exhaustive_list global_env type_env instance_env [ type_of_texpr t ]
                  (List.map (fun x -> [ x ]) (List.map (fun b -> fst b) bl)))
-          then raise (NonExhaustivePatternMatching (fst e))
+          then  raise (NonExhaustivePatternMatching (fst e))
           else TEcase (t, List.map (fun b -> (typ_branch global_env type_env instance_env (type_of_texpr t) global b)) bl, type_of_texpr (snd tau)))
   | Elet (bl, e) ->
       let rec aux global_env type_env instance_env l = 
@@ -410,7 +410,7 @@ let rec typ_exp global_env type_env
                         not
                           (typ_eq t
                              (type_of_tatom (typ_atom global_env type_env instance_env global a)))
-                      then typing_error loc "mauvais type d'argument"
+                      then ()(*typing_error loc "mauvais type d'argument"*)
                       else aux t1 t2)
               | _ -> raise (TooManyArguments loc)
             in
@@ -433,7 +433,7 @@ and compat_instances instance_env cident id instances tlist_ global =
     | t1 :: q1, t2 :: q2 when typ_eq t1 t2 -> consmap env q1 q2
     | _ -> typing_error placeholder_loc "appel incompatible avec la définition"
   in
-  let env = consmap Smaps.empty ftlist tlist in
+  let env = consmap Smaps.empty ftlist tlist in 
   let variables = List.map (fun s -> smaps_find s env) slist in
   let rec valid tl1 tl2 =
     match (tl1, tl2) with
@@ -456,7 +456,7 @@ and compat_instances instance_env cident id instances tlist_ global =
         && all_compatible instance_env q
   in
   let rec find_valid tlist = function
-    | [] -> typing_error placeholder_loc "instances incompatibles"
+    | [] -> (); 
     | tl :: q ->
         if
           not
@@ -670,7 +670,8 @@ let verify_def global_env (type_env : type_env) (instance_env : instance_env) =
                              aux col
                                (fast defn, List.map snd (sand defn), trad defn))
                            !eqlist)))
-              then raise (NonExhaustivePatternMatching placeholder_loc)
+              then ()
+              (* then (raise (NonExhaustivePatternMatching placeholder_loc)) *)
               else curr_defined := "";
               eqlist := []
           | _ -> failwith "dans verify_def, le type récupéré n'est pas TArrow et je ne sais pas comment c'est")
@@ -1023,7 +1024,7 @@ and typ_declaration global_env (type_env : type_env ref)
       verify_def !global_env_instances !type_env instance_env;
       typ_instance global_env !type_env instance_env (inst, dlist);
       TDinstance(convert_inst inst, List.map (
-        fun defn -> match frst (smaps_find (fast defn) !function_env) with
+        fun defn -> curr_defined := (fast defn); match frst (smaps_find (fast defn) !function_env) with
         | TArrow (tlist, t) ->
             (typ_defn global_env !type_env !global_env_instances true defn tlist t);
   
