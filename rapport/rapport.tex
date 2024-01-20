@@ -17,7 +17,7 @@
 
 \makeatletter
 
-\title{\vspace{-3ex} \textbf{Rapport:\\ Compilateur Petit Purescript}}
+\title{\vspace{-3ex}\textbf{Rapport:\\ Compilateur Petit Purescript}}
 \author{Matthieu Boyer, Antoine Groudiev}
 \date{}
 
@@ -40,6 +40,7 @@ Une fois créé, le compilateur peut être exécuté en lançant une commande de
 \begin{center}
     \texttt{./ppurs [options] file.purs}
 \end{center}
+Les différentes options disponibles sont listées par la commande \texttt{./ppurs --help}, parmi lesquelles les options demandées d'analyse syntaxique ou typage seuls, et un mode de déboggage qui affiche l'AST.
 
 \section{Choix techniques}
 Le langage utilisé est OCaml. L'analyse lexicale est faite à l'aide de l'outil \texttt{ocamllex}, et l'analyse syntaxique avec Menhir.
@@ -51,8 +52,9 @@ Le fichier \texttt{utility.ml} contient des fonctions utilitaires servant notamm
 
 \subsection{Analyse lexicale}
 \texttt{lexer.mll} contient un analyseur lexical traditionnel, dans le sens où il ne gère pas l'indentation significative. 
+
 À la place, c'est \texttt{indenter.ml} contient un second analyseur lexical. 
-Son rôle est de traiter correctement l'indentation significative propre à PureScript, en générant à la volée les tokens factice \texttt{SEMICOLON} (\texttt{;}), \texttt{LBRACK} (\texttt{\{}) et \texttt{RBRACK} (\texttt{\}}). 
+Son rôle est de traiter correctement l'indentation significative propre à PureScript, en générant à la volée les tokens factices \texttt{SEMICOLON} (\texttt{;}), \texttt{LBRACK} (\texttt{\{}) et \texttt{RBRACK} (\texttt{\}}). 
 La fonction principale de ce fichier, \texttt{traiter\_lexeme}, reproduit le comportement attendu d'un analyseur lexical.
 Elle a sensiblement le même type que \texttt{Lexer.token}, à l'exception du booléen précisant le type (fort ou faible) voulu.
 
@@ -68,7 +70,7 @@ L'arbre de syntaxe abstraite généré par l'analyse syntaxique est défini dans
 Le fichier \texttt{compile.ml} est séparé en deux parties: l'allocation sur la pile, et la production du code assembleur.  
 
 \subsubsection{Allocation}
-Le schéma de compilation et particulièrement d'allocation est similaire à celui décrit dans le sujet. 
+Le schéma de compilation et particulièrement d'allocation est similaire à celui décrit dans le sujet. Les valeurs de retour des fonctions sont cependant stockées sur la pile, et non pas dans le registre \texttt{\%rax}.
 
 C'est également à cette étape que les éventuels \emph{pattern matching} faisant intervenir plusieurs déclarations de fonctions sont convertis en un \texttt{case}, dans la fonction \texttt{alloc}. (Ceci aurait dû plus logiquement être fait pendant le typage.)
 
@@ -82,10 +84,13 @@ Le fichier \texttt{pretty.ml} contient un \emph{pretty printer} pour les arbres 
 
 \begin{figure}[!h]
     \center
-    \includegraphics[scale=0.5]{pretty_printer.png}
+    \includegraphics[scale=0.45]{pretty_printer.png}
     \caption{Exemple du \emph{pretty printer} sur \texttt{concat.purs}}
 \end{figure}
 
-%\section{Limitations connues}
+\section{Limitations connues}
+Notre compilateur ne passe pas tous les tests fournis. Ces limitations sont dues aux difficultés rencontrées lors du typage des instances et du \emph{pattern matching}.
+
+Par ailleurs, la gestion de la pile laisse à désirer. Dans certains cas (\texttt{do}, \texttt{if}), il aurait été préférable d'allouer les expressions successivement calculées aux mêmes emplacements sur la pile plutôt que de continuer à allouer en haut de celle-ci. Nous avons néanmoins adopté cette dernière option pour simplifier la gestion des compteurs et ainsi faciliter de déboggage.
 
 \end{document}
