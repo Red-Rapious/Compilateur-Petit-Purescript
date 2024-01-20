@@ -204,19 +204,43 @@ let alloc genv tdecl_list : adecl list =
       | 0 -> () (* pas de tdefn en attente *)
       | 1 -> (* une seule tdefn, on la compile normalement *)
         adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
-      | _ -> 
-        (* au moins 2 tdefn, on les compile en une seule avec un case *)
-        let branch_list = List.map (fun d ->
-          let plist = tdefn_plist d in
-          (* on remplace le dernier argument par la variable de case *)
-          let last_arg = List.nth plist ((List.length plist) - 1) in
-          Parg (Typing.placeholder_loc, last_arg), tdefn_expr d
+      | _ -> (* au moins 2 tdefn, on les compile en une seule avec un case *)
+
+        (* on détermine sur quelle variable effectuer le case *)
+        let first_tdefn = List.hd !tdefn_buffer in
+        let first_plist = tdefn_plist first_tdefn in
+        let replace_index = ref None in
+        (* on parcourt les variables *)
+        for i = 0 to ((List.length first_plist) - 1) do
+          let difference = ref false in 
+          let default_value = List.nth first_plist i in
+
+          (* on parcourt les tdefn pour voir si la variable considérée change *)
+          List.iter (fun (_, plist, _) ->
+            if default_value <> List.nth plist i then difference := true
+          ) !tdefn_buffer ;
+          
+          if !difference then begin 
+            (* au moins deux variables changent *)
+            if !replace_index <> None then failwith "Le compilateur ne prend pas en charge le matching sur plus d'une variable qui change."
+            else replace_index := Some i
+          end
+        done ;
+
+        let replace_index = match !replace_index with
+        | Some x -> x
+        | None -> failwith "Définitions de fonctions contradictoires ou redondantes ; cette erreur aurait dû être rattrapée au typage."
+        in
+
+        (* conversion des patargs en branches *)
+        let branch_list = List.map (fun (_, plist, expr) ->
+          Parg (Typing.placeholder_loc, List.nth plist replace_index), expr
         ) (List.rev !tdefn_buffer) in
 
         (* (ce type est mauvais, je le sais) *)
         let t = type_of_texpr (tdefn_expr (List.hd !tdefn_buffer)) in
         let expr = TEcase (
-          (* on switch selon la nouvelle variable introduite *)
+          (* on case selon la nouvelle variable introduite *)
           TEatom(TAident(".match_variable", t), t),
           branch_list,
           TStr
@@ -226,7 +250,7 @@ let alloc genv tdecl_list : adecl list =
         let patarg_list = (List.mapi (fun i patarg ->
           (* à la place de la variable sur laquelle on effectue le case, 
              on met la nouvelle variable introduite *)
-          if i = (List.length plist) - 1 then (Pident ".match_variable")
+          if i = replace_index then Pident ".match_variable"
           else patarg
         ) plist)
         in
