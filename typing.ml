@@ -243,7 +243,7 @@ let rec typ_exp global_env type_env
       | TBool ->
           let s2 = typ_exp global_env type_env instance_env global e2 in
           let s3 = typ_exp global_env type_env instance_env global e3 in
-          if typ_eq (type_of_texpr s2) (type_of_texpr s3)then TEif (s1, s2, s3, type_of_texpr s2)
+          if typ_eq (type_of_texpr s2) (type_of_texpr s3) then TEif (s1, s2, s3, type_of_texpr s2)
           else
             typing_error (fst e3) "les deux branches doivent être de même type"
       | _ ->
@@ -410,7 +410,7 @@ let rec typ_exp global_env type_env
                         not
                           (typ_eq t
                              (type_of_tatom (typ_atom global_env type_env instance_env global a)))
-                      then ()(*typing_error loc "mauvais type d'argument"*)
+                      then typing_error loc "mauvais type d'argument"
                       else aux t1 t2)
               | _ -> raise (TooManyArguments loc)
             in
@@ -968,7 +968,6 @@ and typ_instance global_env (type_env : type_env) (instance_env : instance_env)
 
 (* Typage d'un fichier, fonction principale appelée par ppurs.ml *)
 and typ_file (f : file) : tfile =
-  (* TODO : reconstruire l'AST typé *)
   let global_env = add false "unit" TUnit empty in
   let type_env =
     ref
