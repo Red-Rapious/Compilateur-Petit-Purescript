@@ -92,45 +92,6 @@ let () =
       eprintf "Warning: le nom du module n'est pas 'Main'@." ;
     if !type_only then exit 0;
 
-    (*let typed_file = {
-      tmodule_name = program.module_name ;
-      tmain = [
-        TDclass {
-          name = "C" ;
-          params = [] ;
-          decls = [
-            {
-              name = "foo" ;
-              variables = [] ;
-              ntypes = [];
-              types = [Tatype (Tident "Int")] ;
-              out_type = Tatype (Tident "String")
-            }
-          ]
-        };
-
-        TDinstance (TIntype ("C", []), [
-          (
-            "foo", 
-            [Pconst (Cstring "_")],
-            TEatom (TAconst (Cstring "a", TStr), TStr)
-          )
-        ]);
-
-        TDfdecl ({
-          tname = "main";
-          tvariables = [];
-          tntypes = [];
-          ttypes = [];
-          tout_type = TCons ("Effect", [TUnit])
-        });
-
-        TDefn (
-          "main", [], TEfunc ("log", [TAexpr (TEfunc ("foo", [TAconst (Cint 1, TInt)], TStr), TStr)], TCons ("Effect", [TUnit]))
-        )
-      ]
-    } in*)
-
     Compile.compile_program typed_file.tmain !ofile !dbg
   with
     (* Erreur lexicale *)

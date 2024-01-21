@@ -169,7 +169,6 @@ and alloc_branch genv (env: local_env) fpcur (tpattern, texpr) =
   (apattern, alloc_expr genv union_env fpcur texpr)
 
 and alloc_pattern genv fpcur = function 
-(* TODO : se débarasser des localisations plus tôt *)
 | Parg (_, tpatarg) -> 
   let apatarg, env = alloc_patarg genv fpcur tpatarg in 
   AParg apatarg, env
@@ -260,7 +259,6 @@ let alloc genv tdecl_list : adecl list =
           else patarg
         ) plist)
         in
-        (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
         add_to_decl_list (TDefn (tdefn_name (List.hd !tdefn_buffer), patarg_list, expr)) ;
     end ;
     tdefn_buffer := []
@@ -311,7 +309,6 @@ let include_print_int = ref false
 let include_div = ref false
 let include_concat = ref false
 
-(* todo: retirer les constructions inutiles *)
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
 | ADinstance (_, adefn_list) -> 
@@ -671,7 +668,6 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label branch_nb
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
   movq (ind ~ofs:(8*branch_nb) r9) (reg rdx) ++
   movq (reg rdx) (ind ~ofs:address rbp) ++
-  (* TODO: ajouter un moyen de ne rien compiler *)
   compile_pattern address res_adr (failwith "ne rien compiler") matching_label pattern ++
   jmp branch_continue_label ++
   label matching_label
