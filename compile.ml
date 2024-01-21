@@ -24,13 +24,13 @@ match Smap.find_opt name env with
 | Some x -> x
 | None -> raise (UndefIdent name)
 
-let rec alloc_decl genv (decl:tdecl) : adecl =
+let rec alloc_decl genv (decl:tdecl) : adecl option =
 match decl with
-| TDefn d -> ADefn (alloc_defn genv d)
-| TDfdecl d -> alloc_fdecl d
-| TDdata d -> ADdata d
-| TDclass c -> ADclass c
-| TDinstance (instance, dlist) -> ADinstance (instance, List.map (fun d -> alloc_defn genv d) dlist) (* todo: change? *)
+| TDefn d -> Some (ADefn (alloc_defn genv d))
+| TDfdecl _ -> None
+| TDdata _ -> None
+| TDclass _ -> None
+| TDinstance (instance, dlist) -> Some (ADinstance (instance, List.map (fun d -> alloc_defn genv d) dlist))
 
 and alloc_defn genv (ident, plist, expr) : adefn = 
   if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
@@ -186,14 +186,6 @@ and alloc_pattern genv fpcur = function
   ) tpatarg_list in
   APconsarg (uid, apatarg_list), !env
 
-and alloc_fdecl fdecl = ADfdecl {
-  aname = fdecl.tname ;
-  avariables = fdecl.tvariables;
-  antypes = fdecl.tntypes;
-  atypes = fdecl.ttypes;
-  aout_type = fdecl.tout_type
-}
-
 (*let alloc genv = List.map (alloc_decl genv)*)
 
 let tdefn_name (n, _, _) = n
@@ -204,6 +196,12 @@ let alloc genv tdecl_list : adecl list =
   let tdefn_buffer = ref [] in
   let adecl_list : adecl list ref = ref [] in
 
+  let add_to_decl_list x = 
+  match alloc_decl genv x with 
+  | Some x -> adecl_list := x :: !adecl_list
+  | None -> ()
+  in
+
   (* l'ojectif de cette fonction est de transformer les tdefn 
      accumulées en une seule tdefn comprenant un case *)
   (* conseil au lecteur : commencer par lire le List.iter plus bas
@@ -212,7 +210,7 @@ let alloc genv tdecl_list : adecl list =
     begin match List.length !tdefn_buffer with
       | 0 -> () (* pas de tdefn en attente *)
       | 1 -> (* une seule tdefn, on la compile normalement *)
-        adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
+        add_to_decl_list (TDefn (List.hd !tdefn_buffer)) 
       | _ -> (* au moins 2 tdefn, on les compile en une seule avec un case *)
 
         (* on détermine sur quelle variable effectuer le case *)
@@ -263,10 +261,7 @@ let alloc genv tdecl_list : adecl list =
         ) plist)
         in
         (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
-        adecl_list := 
-        (alloc_decl genv (TDefn (
-          tdefn_name (List.hd !tdefn_buffer), patarg_list, expr
-        ))) :: !adecl_list 
+        add_to_decl_list (TDefn (tdefn_name (List.hd !tdefn_buffer), patarg_list, expr)) ;
     end ;
     tdefn_buffer := []
   in
@@ -280,7 +275,9 @@ let alloc genv tdecl_list : adecl list =
     | _ -> 
       (* si on croise autre chose, on traite d'abord les tdefn en attente *)
       process_tdefn_buffer (); 
-      adecl_list := alloc_decl genv tdecl :: !adecl_list 
+      match alloc_decl genv tdecl with
+      | Some x -> adecl_list := x :: !adecl_list 
+      | None -> ()
   ) tdecl_list ;
   (* on traite les tdefn qui restent éventuellement *)
   process_tdefn_buffer () ;
@@ -317,9 +314,6 @@ let include_concat = ref false
 (* todo: retirer les constructions inutiles *)
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
-| ADfdecl _ -> nop
-| ADdata _ -> nop
-| ADclass _ -> nop
 | ADinstance (_, adefn_list) -> 
   List.fold_left (fun code defn -> 
     code ++ compile_defn defn

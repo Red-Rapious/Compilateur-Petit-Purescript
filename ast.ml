@@ -217,11 +217,4 @@ type adefn = ident * apatarg list * aexpr * frame_size
 
 type adecl = 
 | ADefn of adefn
-(* 
-  TODO: les lignes ci-dessous sont peut-être à ajuster pour des versions
-  custom de data, class, instance
-*)
-| ADfdecl of afdecl
-| ADdata of data
-| ADclass of clas
 | ADinstance of tinstance * (adefn list)
