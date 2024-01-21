@@ -1,5 +1,5 @@
 \documentclass[12pt,a4paper]{article} 
-\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage[a4paper,margin=2cm]{geometry}
 
 \usepackage{cmap}
 \usepackage[french]{babel}
@@ -53,10 +53,10 @@ Le fichier \texttt{utility.ml} contient des fonctions utilitaires servant notamm
 \subsection{Analyse lexicale}
 \texttt{lexer.mll} contient un analyseur lexical traditionnel, dans le sens où il ne gère pas l'indentation significative. 
 
-À la place, c'est \texttt{indenter.ml} contient un second analyseur lexical. 
-Son rôle est de traiter correctement l'indentation significative propre à PureScript, en générant à la volée les tokens factices \texttt{SEMICOLON} (\texttt{;}), \texttt{LBRACK} (\texttt{\{}) et \texttt{RBRACK} (\texttt{\}}). 
+À la place, est \texttt{indenter.ml} contient un second analyseur lexical. 
+Son rôle est de traiter correctement l'indentation significative propre à PureScript, en générant à la volée les tokens factices \texttt{SEMICOLON} (\texttt{;}), \texttt{LBRACK} (\texttt{\{}) et \texttt{RBRACK} (\texttt{\}}) parmi le flux de lexèmes généré par \texttt{lexer.mll}.
 La fonction principale de ce fichier, \texttt{traiter\_lexeme}, reproduit le comportement attendu d'un analyseur lexical.
-Elle a sensiblement le même type que \texttt{Lexer.token}, à l'exception du booléen précisant le type (fort ou faible) voulu.
+Elle a ainsi sensiblement le même type que \texttt{Lexer.token}, à l'exception du booléen précisant le type (fort ou faible) voulu.
 
 \subsection{Analyse syntaxique}
 \texttt{parser.mly} contient l'analyseur syntaxique. Son comportement est standard et suit majoritairement la grammaire PureScript telle que détaillée dans le sujet. Une exception notable est la règle \texttt{tdecl}, qui nous a posé des difficultés à parser. La technique adoptée a été de lire la liste à la main, à l'aide d'une règle \texttt{type\_list} qui implémente manuellement et plus finement la construction \texttt{list} de Menhir. Pour pouvoir localiser précisément les erreurs de typage, les types \texttt{expr}, \texttt{atom}, et \texttt{patarg} sont transformés par le parser en \texttt{loc\_expr}, \texttt{loc\_atom}, et \texttt{loc\_patarg}, qui sont décorés des informations de localisation.
@@ -65,6 +65,8 @@ L'arbre de syntaxe abstraite généré par l'analyse syntaxique est défini dans
 
 \subsection{Typage}
 \texttt{typing.ml} contient l'analyseur sémantique. L'algorithme employé est le suivant : on type une à une les déclarations du fichier, en maintenant dans des tables de hachage, qui contiennent les définitions de fonctions, de types, de classes et d'instances. On vérifie à chaque étape que la liste des définitions à l'intérieur d'une déclaration (\texttt{fdecl}, \texttt{clas}, \texttt{data}, \texttt{instance} dans le type \texttt{decl}) est bien regroupée par nom de fonction, et que celle-ci ne déborde pas de la déclaration. Dans chaque définition (\texttt{defn} dans le type \texttt{decl}), on vérifie récursivement le type de chaque morceau selon la construction de l'arbre de syntaxe. 
+
+A été fait le choix de séparer les différentes erreurs de typage en de nombreuses exceptions, comme le traduit les premières lignes du fichier. Cette séparation est en fait peu utile en pratique pour un compilateur de faible ampleur, mais nous semblait plus propre et plus \emph{scalable}.
 
 \subsection{Production de code}
 Le fichier \texttt{compile.ml} est séparé en deux parties: l'allocation sur la pile, et la production du code assembleur.  
