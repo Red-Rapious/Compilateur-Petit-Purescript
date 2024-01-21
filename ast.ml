@@ -187,7 +187,7 @@ type aexpr =
 and aatom =
   (* le permier int est pour l'adresse de la constante
      un peu bancal mais ça marche je crois *)
-| AAconst of constant * int * ttyp * int
+| AAconst of constant * ttyp * int
 | AAlident of ttyp * int(* adresse, type *)
 | AAuident of int * ttyp * int
 | AAexpr of aexpr * ttyp * int
@@ -205,7 +205,7 @@ and afdecl = {
 }
 
 and apatarg = 
-| APconst of constant * int * int
+| APconst of constant * int
 | APlident of ident * int
 | APuident of int * int
 | APpattern of apattern * int
@@ -217,11 +217,4 @@ type adefn = ident * apatarg list * aexpr * frame_size
 
 type adecl = 
 | ADefn of adefn
-(* 
-  TODO: les lignes ci-dessous sont peut-être à ajuster pour des versions
-  custom de data, class, instance
-*)
-| ADfdecl of afdecl
-| ADdata of data
-| ADclass of clas
 | ADinstance of tinstance * (adefn list)

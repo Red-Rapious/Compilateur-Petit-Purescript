@@ -24,13 +24,13 @@ match Smap.find_opt name env with
 | Some x -> x
 | None -> raise (UndefIdent name)
 
-let rec alloc_decl genv (decl:tdecl) : adecl =
+let rec alloc_decl genv (decl:tdecl) : adecl option =
 match decl with
-| TDefn d -> ADefn (alloc_defn genv d)
-| TDfdecl d -> alloc_fdecl d
-| TDdata d -> ADdata d
-| TDclass c -> ADclass c
-| TDinstance (instance, dlist) -> ADinstance (instance, List.map (fun d -> alloc_defn genv d) dlist) (* todo: change? *)
+| TDefn d -> Some (ADefn (alloc_defn genv d))
+| TDfdecl _ -> None
+| TDdata _ -> None
+| TDclass _ -> None
+| TDinstance (instance, dlist) -> Some (ADinstance (instance, List.map (fun d -> alloc_defn genv d) dlist))
 
 and alloc_defn genv (ident, plist, expr) : adefn = 
   if !dbg then Pretty.pp_tdefn Format.std_formatter (ident, plist, expr) ;
@@ -72,9 +72,13 @@ and alloc_expr genv (env: local_env) fpcur : (texpr -> aexpr)= function
   let e1' = alloc_expr genv env fpcur e1 in 
   let e2' = alloc_expr genv env fpcur e2 in 
   let e3' = alloc_expr genv env fpcur e3 in 
-  (* TODO: least counter *)
+  (* TODO: optimisation de la pile *)
   AEif (e1', e2', e3', t, fpcur ())
+
 | TEfunc (name, targs, t) ->
+  (* je pensais en écrivant l'AST que je n'aurais plus besoin de la distinction 
+     en lident et uident - quelle erreur ! pour éviter de rajouter de la charge de
+     travail dans la partie typage, j'ai ici fait un fix assez moche mais qui marche *)
   let first = String.get name 0 in 
   (* TEfunc *)
   if first = Char.lowercase_ascii first then begin 
@@ -116,18 +120,19 @@ and alloc_expr genv (env: local_env) fpcur : (texpr -> aexpr)= function
   AEcase (aexpr, ablist, t, fpcur ())
 
 and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function 
-| TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, c_adr)
+| TAconst (c, t) -> AAconst (c, t, fpcur ())
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
 | TAident (ident, t) -> 
   (* TODO : séparer TAuident et TAlident *)
+  (* voir la remarque précédente dans TEfunc *)
   let first_letter = String.get ident 0 in
 
   (* TAlident *)
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
-  | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
+  | "unit" -> AAconst (Cbool (false), t, fpcur ())
   | _ -> let adr = find_in_env ident env in AAlident (t, adr))
 
   (* TAuident *)
@@ -139,7 +144,7 @@ and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function
   end
 
 and alloc_patarg genv fpcur = function
-| Pconst c -> let address = fpcur () in APconst (c, address, address), Smap.empty
+| Pconst c -> APconst (c, fpcur ()), Smap.empty
 | Pident ident -> 
   let first_letter = String.get ident 0 in
   (* lident *)
@@ -181,14 +186,6 @@ and alloc_pattern genv fpcur = function
   ) tpatarg_list in
   APconsarg (uid, apatarg_list), !env
 
-and alloc_fdecl fdecl = ADfdecl {
-  aname = fdecl.tname ;
-  avariables = fdecl.tvariables;
-  antypes = fdecl.tntypes;
-  atypes = fdecl.ttypes;
-  aout_type = fdecl.tout_type
-}
-
 (*let alloc genv = List.map (alloc_decl genv)*)
 
 let tdefn_name (n, _, _) = n
@@ -199,13 +196,21 @@ let alloc genv tdecl_list : adecl list =
   let tdefn_buffer = ref [] in
   let adecl_list : adecl list ref = ref [] in
 
+  let add_to_decl_list x = 
+  match alloc_decl genv x with 
+  | Some x -> adecl_list := x :: !adecl_list
+  | None -> ()
+  in
+
   (* l'ojectif de cette fonction est de transformer les tdefn 
      accumulées en une seule tdefn comprenant un case *)
+  (* conseil au lecteur : commencer par lire le List.iter plus bas
+     puis revenir à cette fonction *)
   let process_tdefn_buffer () = 
     begin match List.length !tdefn_buffer with
       | 0 -> () (* pas de tdefn en attente *)
       | 1 -> (* une seule tdefn, on la compile normalement *)
-        adecl_list := alloc_decl genv (TDefn (List.hd !tdefn_buffer)) :: !adecl_list
+        add_to_decl_list (TDefn (List.hd !tdefn_buffer)) 
       | _ -> (* au moins 2 tdefn, on les compile en une seule avec un case *)
 
         (* on détermine sur quelle variable effectuer le case *)
@@ -256,14 +261,12 @@ let alloc genv tdecl_list : adecl list =
         ) plist)
         in
         (* TODO: vérifier que les tdefn_name sont tous les mêmes *)
-        adecl_list := 
-        (alloc_decl genv (TDefn (
-          tdefn_name (List.hd !tdefn_buffer), patarg_list, expr
-        ))) :: !adecl_list 
+        add_to_decl_list (TDefn (tdefn_name (List.hd !tdefn_buffer), patarg_list, expr)) ;
     end ;
     tdefn_buffer := []
   in
 
+  (* -- Groupe les tdecl à la suite en un seul case -- *)
   List.iter (fun tdecl -> 
     match tdecl with
     | TDefn tdefn -> 
@@ -272,12 +275,14 @@ let alloc genv tdecl_list : adecl list =
     | _ -> 
       (* si on croise autre chose, on traite d'abord les tdefn en attente *)
       process_tdefn_buffer (); 
-      adecl_list := alloc_decl genv tdecl :: !adecl_list 
+      match alloc_decl genv tdecl with
+      | Some x -> adecl_list := x :: !adecl_list 
+      | None -> ()
   ) tdecl_list ;
   (* on traite les tdefn qui restent éventuellement *)
   process_tdefn_buffer () ;
 
-  List.rev !adecl_list
+  List.rev !adecl_list (* l'accumulation a été faite à l'envers *)
 
 
 (* PRODUCTION DU CODE *)
@@ -309,9 +314,6 @@ let include_concat = ref false
 (* todo: retirer les constructions inutiles *)
 let rec compile_decl = function 
 | ADefn d -> compile_defn d
-| ADfdecl _ -> nop
-| ADdata _ -> nop
-| ADclass _ -> nop
 | ADinstance (_, adefn_list) -> 
   List.fold_left (fun code defn -> 
     code ++ compile_defn defn
@@ -379,14 +381,12 @@ and compile_expr = function
 
 | AEunop (Uneg, aexpr, t, res_adr) ->
   compile_expr aexpr ++
-  let eadr = address_of_aexpr aexpr in 
   movq (imm 0) (reg r8) ++
-  subq (ind ~ofs:eadr rbp) (reg r8) ++
+  subq (ind ~ofs:(address_of_aexpr aexpr) rbp) (reg r8) ++
   movq (reg r8) (ind ~ofs:res_adr rbp)
 
 | AEdo (expr_list, t, res_adr) ->
-  List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list ++
-  movq (imm 0) (ind ~ofs:res_adr rbp)
+  List.fold_left (fun code expr -> code ++ compile_expr expr) nop expr_list
 
 | AEif (e1, e2, e3, _, res_adr) -> 
   let if_case_true = ".if_case_true_" ^ (string_of_int !if_count)
@@ -435,7 +435,6 @@ and compile_expr = function
     code ++
     compile_pattern (address_of_aexpr aexpr) res_adr bexpr branch_exit_label bpattern
   ) nop blist ++
-  (*(movq (imm 0) (ind ~ofs:res_adr rbp))  ++*)
   
   label branch_exit_label
 
@@ -567,14 +566,13 @@ and compile_atom = function
 | AAexpr (expr, t, res_adr) -> 
   compile_expr expr ++
   move_stack res_adr (address_of_aexpr expr)
-| AAconst (c, c_adr, t, res_adr) -> 
-  compile_const c c_adr ++
-  move_stack c_adr res_adr
+| AAconst (c, t, res_adr) -> 
+  compile_const c res_adr
 | AAlident _ -> nop
-| AAuident (ident, t, addr) -> 
+| AAuident (uid, t, addr) -> 
   movq (imm 8) (reg rdi) ++
   call "malloc" ++
-  movq (imm ident) (ind rax) ++
+  movq (imm uid) (ind rax) ++
   movq (reg rax) (ind ~ofs:addr rbp)
 
 and compile_const c adr = 
@@ -594,13 +592,13 @@ and compile_const c adr =
 and compile_pattern condition_adr res_adr expr_true end_label = function 
 | AParg (patarg) -> begin 
     match patarg with
-    | APconst (c, c_adr, adr) -> 
+    | APconst (c, adr) -> 
       let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
       incr branch_count ;
 
-      compile_const c c_adr ++
+      compile_const c adr ++
       movq (ind ~ofs:condition_adr rbp) (reg r8) ++
-      movq (ind ~ofs:c_adr rbp) (reg r9) ++
+      movq (ind ~ofs:adr rbp) (reg r9) ++
       cmpq (reg r8) (reg r9) ++
       
       (* si le pattern ne match pas, on va au prochain cas *)
@@ -633,16 +631,16 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
 | APconsarg (uid, plist) ->
   let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
   incr branch_count ;
-  let i = ref 0 in
+  let branch_nb = ref 0 in
 
   movq (ind ~ofs:condition_adr rbp) (reg r8) ++
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label ++
 
   List.fold_left (fun code patarg -> 
-    incr i ; 
+    incr branch_nb ; 
     code ++ 
-    compile_patarg_in_cons condition_adr res_adr branch_continue_label !i patarg
+    compile_patarg_in_cons condition_adr res_adr branch_continue_label !branch_nb patarg
   ) nop plist ++
 
   compile_expr expr_true ++
@@ -651,27 +649,27 @@ and compile_pattern condition_adr res_adr expr_true end_label = function
   
   label branch_continue_label
 
-and compile_patarg_in_cons condition_adr res_adr branch_continue_label i = function 
+and compile_patarg_in_cons condition_adr res_adr branch_continue_label branch_nb = function 
 | APlident (_, address) -> 
-  movq (ind ~ofs:condition_adr rbp) (reg r9) ++ (* r8 déjà utilisé *)
-  movq (ind ~ofs:(8*i) r9) (reg rdx) ++
+  movq (ind ~ofs:condition_adr rbp) (reg r9) ++
+  movq (ind ~ofs:(8*branch_nb) r9) (reg rdx) ++
   movq (reg rdx) (ind ~ofs:address rbp)
 | APuident (uid, address) ->
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:(8*i) r9) (reg r8) ++
+  movq (ind ~ofs:(8*branch_nb) r9) (reg r8) ++
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
-| APconst (c, c_adr, address) -> 
-  compile_const c c_adr ++
+| APconst (c, address) -> 
+  compile_const c address ++
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:c_adr rbp) (reg r8) ++
-  cmpq (reg r8) (ind ~ofs:(8*i) r9) ++
+  movq (ind ~ofs:address rbp) (reg r8) ++
+  cmpq (reg r8) (ind ~ofs:(8*branch_nb) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->
   let matching_label = ".matching" ^ (string_of_int !matching_count) in 
   incr matching_count ;
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:(8*i) r9) (reg rdx) ++
+  movq (ind ~ofs:(8*branch_nb) r9) (reg rdx) ++
   movq (reg rdx) (ind ~ofs:address rbp) ++
   (* TODO: ajouter un moyen de ne rien compiler *)
   compile_pattern address res_adr (failwith "ne rien compiler") matching_label pattern ++
@@ -688,7 +686,9 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   | TDdata data -> 
     let data_constr = ref Smap.empty in
     List.iter (fun (ident, t) -> 
-      (* on ajout à l'environnemnet global l'identifiant unique et le nombre d'arguments *)
+      (* on ajoute à l'environnemnet global :
+         - un entier pour identifier uniquement la construction
+         - le nombre d'arguments pour connaître la place à allouer *)
       let constr = (!data_count, List.length t) in
       incr data_count ;
       data_constr := Smap.add ident constr !data_constr) data.types ;
@@ -708,6 +708,7 @@ let compile_program (p : tdecl list) ofile dbg_mode =
   if !dbg then Format.printf "== ALLOCATED AST ==@." ;
   let code = List.fold_left (fun code tdecl -> code ++ compile_decl tdecl) nop p in
   
+  (* ajout dans .data des chaînes de charactères rencontrées statiquement *)
   let data = Hashtbl.fold (fun x _ l -> label x ++ dquad [1] ++ l) (Hashtbl.create 17)
   begin
     label ".Sprint_int" ++ string "%d\n" ++

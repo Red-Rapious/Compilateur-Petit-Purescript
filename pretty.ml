@@ -375,8 +375,8 @@ match p with
   List.iter (indent fmt (depth + 1) ; pp_apatarg fmt (depth + 1)) patarg_list
   
 and pp_apatarg fmt depth = function
-| APconst (c, c_adr, i) -> 
-  Format.fprintf fmt "%sAPconst%s with const offset %s%d%s and offset %s%d%s:@." blue_code reset_code yellow_code c_adr reset_code yellow_code i reset_code ;
+| APconst (c, i) -> 
+  Format.fprintf fmt "%sAPconst%s with offset %s%d%s:@." blue_code reset_code yellow_code i reset_code ;
   pp_const fmt (depth + 1) c
 | APlident (id, i) ->
   Format.fprintf fmt "%sAPlident%s %s\"%s\"%s and offset %s%d%s:@." blue_code reset_code green_code id reset_code yellow_code i reset_code
@@ -387,10 +387,10 @@ and pp_apatarg fmt depth = function
 and pp_aatom fmt depth a = 
 indent fmt depth ;
 match a with
-| AAconst (c, i, t, i') ->
+| AAconst (c, t, i') ->
   Format.fprintf fmt "%sAAconst%s of type " blue_code reset_code ;
   pp_typ fmt t ;
-  Format.fprintf fmt " with const offset %s%d%s and result offset of %s%d%s@." yellow_code i reset_code yellow_code i' reset_code;
+  Format.fprintf fmt " and result offset of %s%d%s@." yellow_code i' reset_code;
   pp_const fmt (depth + 1) c
 | AAuident (_, t, i) -> 
   Format.fprintf fmt "%sAAuident%s of type " blue_code reset_code;

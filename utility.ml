@@ -27,7 +27,7 @@ let type_of_aexpr = function
 | AEuident (_, _, t, _) -> t
 
 let type_of_aatom = function
-| AAconst (_, _, t, _) -> t
+| AAconst (_, t, _) -> t
 | AAlident (t, _) -> t
 | AAuident (_, t, _) -> t
 | AAexpr (_, t, _) -> t
@@ -44,7 +44,7 @@ let address_of_aexpr = function
 | AEuident (_, _, _, a) -> a
 
 let address_of_aatom = function
-| AAconst (_, _, _, a) -> a
+| AAconst (_, _, a) -> a
 | AAlident (_, a) -> a
 | AAuident (_, _, a) -> a
 | AAexpr (_, _, a) -> a
