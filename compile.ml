@@ -120,7 +120,7 @@ and alloc_expr genv (env: local_env) fpcur : (texpr -> aexpr)= function
   AEcase (aexpr, ablist, t, fpcur ())
 
 and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function 
-| TAconst (c, t) -> let c_adr = fpcur () in AAconst (c, c_adr, t, c_adr)
+| TAconst (c, t) -> AAconst (c, t, fpcur ())
 | TAexpr (e, t) -> 
   let aexpr = alloc_expr genv env fpcur e in 
   AAexpr (aexpr, t, address_of_aexpr aexpr)
@@ -132,7 +132,7 @@ and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function
   (* TAlident *)
   if first_letter = Char.lowercase_ascii first_letter then
   (match ident with
-  | "unit" -> AAconst (Cbool (false), fpcur (), t, fpcur ())
+  | "unit" -> AAconst (Cbool (false), t, fpcur ())
   | _ -> let adr = find_in_env ident env in AAlident (t, adr))
 
   (* TAuident *)
@@ -144,7 +144,7 @@ and alloc_atom genv (env: local_env) fpcur : (tatom -> aatom) = function
   end
 
 and alloc_patarg genv fpcur = function
-| Pconst c -> let address = fpcur () in APconst (c, address, address), Smap.empty
+| Pconst c -> APconst (c, fpcur ()), Smap.empty
 | Pident ident -> 
   let first_letter = String.get ident 0 in
   (* lident *)
@@ -572,9 +572,8 @@ and compile_atom = function
 | AAexpr (expr, t, res_adr) -> 
   compile_expr expr ++
   move_stack res_adr (address_of_aexpr expr)
-| AAconst (c, c_adr, t, res_adr) -> 
-  compile_const c c_adr ++
-  move_stack c_adr res_adr
+| AAconst (c, t, res_adr) -> 
+  compile_const c res_adr
 | AAlident _ -> nop
 | AAuident (uid, t, addr) -> 
   movq (imm 8) (reg rdi) ++
@@ -599,13 +598,13 @@ and compile_const c adr =
 and compile_pattern condition_adr res_adr expr_true end_label = function 
 | AParg (patarg) -> begin 
     match patarg with
-    | APconst (c, c_adr, adr) -> 
+    | APconst (c, adr) -> 
       let branch_continue_label = ".branch_continue_" ^ (string_of_int !branch_count) in 
       incr branch_count ;
 
-      compile_const c c_adr ++
+      compile_const c adr ++
       movq (ind ~ofs:condition_adr rbp) (reg r8) ++
-      movq (ind ~ofs:c_adr rbp) (reg r9) ++
+      movq (ind ~ofs:adr rbp) (reg r9) ++
       cmpq (reg r8) (reg r9) ++
       
       (* si le pattern ne match pas, on va au prochain cas *)
@@ -666,10 +665,10 @@ and compile_patarg_in_cons condition_adr res_adr branch_continue_label branch_nb
   movq (ind ~ofs:(8*branch_nb) r9) (reg r8) ++
   cmpq (imm uid) (ind r8) ++
   jne branch_continue_label
-| APconst (c, c_adr, address) -> 
-  compile_const c c_adr ++
+| APconst (c, address) -> 
+  compile_const c address ++
   movq (ind ~ofs:condition_adr rbp) (reg r9) ++
-  movq (ind ~ofs:c_adr rbp) (reg r8) ++
+  movq (ind ~ofs:address rbp) (reg r8) ++
   cmpq (reg r8) (ind ~ofs:(8*branch_nb) r9) ++
   jne branch_continue_label
 | APpattern (pattern, address) ->
